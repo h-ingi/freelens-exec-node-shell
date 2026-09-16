@@ -1,9 +1,8 @@
 import { Renderer } from "@freelensapp/extensions";
+import { nodeShellSettings, validateSettings } from "../common/store/node-shell-settings";
 import { checkPermissions, execAvailable, permissionSummary } from "./services/rbac-service";
 import { isNotFound, quotePowerShell, SessionLifecycle } from "./services/session-lifecycle";
-
-const NAMESPACE = "kube-system";
-const NODE_SHELL_IMAGE = "docker.io/library/alpine";
+import { NodeShellPreferenceHint, NodeShellPreferences } from "./settings/preferences";
 
 type NodeMenuProps = Renderer.Component.KubeObjectMenuProps<Renderer.K8sApi.Node>;
 
@@ -17,8 +16,16 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
       return;
     }
 
+    const settings = nodeShellSettings.toJSON();
+    const settingsError = validateSettings(settings);
+    if (settingsError) {
+      Renderer.Component.Notifications.error(settingsError);
+      return;
+    }
+    const NAMESPACE = settings.namespace;
+    const NODE_SHELL_IMAGE = settings.image;
     const nodeName = object.getName();
-    const podName = `node-shell-exec-${crypto.randomUUID()}`;
+    const podName = `${settings.podPrefix}-${crypto.randomUUID()}`;
 
     const podManifest = {
       apiVersion: "v1",
@@ -40,7 +47,7 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
         terminationGracePeriodSeconds: 0,
 
         // 1시간 후에는 강제로 종료
-        activeDeadlineSeconds: 3600,
+        activeDeadlineSeconds: settings.timeoutMinutes * 60,
 
         // Node namespace 접근
         hostPID: true,
@@ -153,7 +160,7 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
           now: Date.now,
           onError: (error) => console.error("[Exec Node Shell] Cleanup will retry", error),
         },
-        3600_000,
+        settings.timeoutMinutes * 60_000,
       );
       const session = lifecycle;
       const timer = window.setInterval(() => {
@@ -212,6 +219,15 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
 }
 
 export default class ExecNodeShellRenderer extends Renderer.LensExtension {
+  onActivate() {
+    nodeShellSettings.loadExtension(this);
+  }
+  appPreferences = [
+    {
+      title: "Exec Node Shell Settings",
+      components: { Input: NodeShellPreferences, Hint: NodeShellPreferenceHint },
+    },
+  ];
   kubeObjectMenuItems = [
     {
       kind: "Node",
