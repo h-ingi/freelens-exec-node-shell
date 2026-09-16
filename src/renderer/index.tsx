@@ -1,4 +1,5 @@
 import { Renderer } from "@freelensapp/extensions";
+import { checkPermissions, execAvailable, permissionSummary } from "./services/rbac-service";
 import { isNotFound, quotePowerShell, SessionLifecycle } from "./services/session-lifecycle";
 
 const NAMESPACE = "kube-system";
@@ -94,6 +95,11 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
     };
 
     try {
+      stage = "checking RBAC";
+      const permissions = await checkPermissions(cluster.id, NAMESPACE);
+      if (!execAvailable(permissions))
+        throw new Error(`Exec Node Shell permissions denied or unknown:\n${permissionSummary(permissions)}`);
+      checkCluster();
       stage = "creating pod";
 
       Renderer.Component.Notifications.info(`Creating node shell pod on ${nodeName}`);
