@@ -18,9 +18,19 @@ export interface LocalSession {
 export const localSessions = new Map<string, LocalSession>();
 let orphanTimer: number | undefined;
 let cleaning = false;
+let cleanupEnabled = true;
+
+export function cleanupIsEnabled(): boolean {
+  return cleanupEnabled;
+}
 
 export function trackSession(session: LocalSession, lifecycle: SessionLifecycle): void {
   session.lifecycle = lifecycle;
+  window.clearInterval(session.timer);
+  if (!cleanupEnabled) {
+    lifecycle.requestStop();
+    return;
+  }
   session.timer = window.setInterval(() => {
     void lifecycle.tick().then(() => {
       if (lifecycle.finished) {
@@ -33,9 +43,14 @@ export function trackSession(session: LocalSession, lifecycle: SessionLifecycle)
 }
 
 export async function stopSession(session: LocalSession): Promise<void> {
+  if (["Closed", "Failed"].includes(session.status)) return;
   session.status = "Stopping";
   session.lifecycle?.requestStop();
   await session.lifecycle?.tick();
+  if (session.lifecycle?.finished) {
+    session.status = "Closed";
+    session.error = undefined;
+  }
 }
 
 export async function listSessionPods(namespace: string): Promise<Renderer.K8sApi.Pod[]> {
@@ -63,18 +78,18 @@ export async function deleteSessionPod(pod: Renderer.K8sApi.Pod): Promise<void> 
 }
 
 export async function cleanOrphans(): Promise<void> {
-  if (cleaning) return;
+  if (cleaning || !cleanupEnabled) return;
   const clusterId = Renderer.Catalog.getActiveCluster()?.id;
   if (!clusterId) return;
   cleaning = true;
   try {
     const namespaces = new Set([...nodeShellSettings.settings.knownNamespaces, nodeShellSettings.settings.namespace]);
     for (const namespace of namespaces) {
-      if (Renderer.Catalog.getActiveCluster()?.id !== clusterId) return;
+      if (!cleanupEnabled || Renderer.Catalog.getActiveCluster()?.id !== clusterId) return;
       try {
         const pods = await listSessionPods(namespace);
         for (const pod of pods) {
-          if (Renderer.Catalog.getActiveCluster()?.id !== clusterId) return;
+          if (!cleanupEnabled || Renderer.Catalog.getActiveCluster()?.id !== clusterId) return;
           const local = localSessions.get(pod.metadata.name);
           if (local && !["Closed", "Failed"].includes(local.status)) continue;
           if (shouldCleanOrphan(pod, Date.now())) await deleteSessionPod(pod);
@@ -90,6 +105,11 @@ export async function cleanOrphans(): Promise<void> {
 }
 
 export function startCleanup(): void {
+  cleanupEnabled = true;
+  window.clearInterval(orphanTimer);
+  for (const session of localSessions.values()) {
+    if (session.lifecycle && !session.lifecycle.finished) trackSession(session, session.lifecycle);
+  }
   void cleanOrphans();
   orphanTimer = window.setInterval(() => {
     void cleanOrphans();
@@ -97,6 +117,7 @@ export function startCleanup(): void {
 }
 
 export async function shutdownCleanup(): Promise<void> {
+  cleanupEnabled = false;
   window.clearInterval(orphanTimer);
   await Promise.all(
     [...localSessions.values()].map(async (session) => {

@@ -1,6 +1,6 @@
 import { Renderer } from "@freelensapp/extensions";
 import { nodeShellSettings, validateSettings } from "../../common/store/node-shell-settings";
-import { type LocalSession, localSessions, trackSession } from "./cleanup-service";
+import { cleanupIsEnabled, type LocalSession, localSessions, trackSession } from "./cleanup-service";
 import { checkPermissions, execAvailable, permissionSummary } from "./rbac-service";
 import { isNotFound, quotePowerShell, SessionLifecycle } from "./session-lifecycle";
 
@@ -71,7 +71,11 @@ export async function openNodeShell(nodeName: string) {
           },
 
           // exec 연결을 기다리기 위한 keep-alive process
-          command: ["sh", "-c", "while [ ! -f /tmp/exec-ended ]; do sleep 1; done"],
+          command: [
+            "sh",
+            "-c",
+            'i=0; while [ ! -f /tmp/exec-started ]; do i=$((i+1)); [ "$i" -ge 180 ] && exit 1; sleep 1; done; while [ ! -f /tmp/exec-ended ]; do sleep 1; done',
+          ],
 
           stdin: true,
           tty: true,
@@ -117,7 +121,7 @@ export async function openNodeShell(nodeName: string) {
     if (!execAvailable(permissions))
       throw new Error(`Exec Node Shell permissions denied or unknown:\n${permissionSummary(permissions)}`);
     checkCluster();
-    if (record.status === "Stopping") throw new Error("Session stopped");
+    if (!cleanupIsEnabled() || record.status === "Stopping") throw new Error("Session stopped");
     stage = "creating pod";
     record.status = "Creating";
 
@@ -137,7 +141,7 @@ export async function openNodeShell(nodeName: string) {
     const readyDeadline = Date.now() + 120_000;
     while (true) {
       checkCluster();
-      if (record.status === "Stopping") throw new Error("Session stopped");
+      if (!cleanupIsEnabled() || record.status === "Stopping") throw new Error("Session stopped");
       const pod = await Renderer.K8sApi.podsApi.get(descriptor);
       if (!pod) throw new Error("Created pod disappeared");
       if (pod.status?.conditions?.some((condition) => condition.type === "Ready" && condition.status === "True")) break;
@@ -147,7 +151,7 @@ export async function openNodeShell(nodeName: string) {
       await new Promise((resolve) => window.setTimeout(resolve, 1000));
     }
 
-    if (record.status === "Stopping") throw new Error("Session stopped");
+    if (!cleanupIsEnabled() || record.status === "Stopping") throw new Error("Session stopped");
     stage = "creating terminal";
 
     const terminalTab = Renderer.Component.createTerminalTab({
@@ -197,7 +201,8 @@ export async function openNodeShell(nodeName: string) {
     stage = "sending exec command";
     const q = quotePowerShell;
     const target = `--context ${q(cluster.contextName)} -n ${q(NAMESPACE)}`;
-    const remote = 'nsenter -t 1 -m -u -i -n -p -- /bin/sh; result=$?; touch /tmp/exec-ended; exit "$result"';
+    const remote =
+      'touch /tmp/exec-started; nsenter -t 1 -m -u -i -n -p -- /bin/sh; result=$?; touch /tmp/exec-ended; exit "$result"';
     const command =
       `Write-Host ${q(`=== Node Shell: ${nodeName} ===`)}; ` +
       `try { kubectl exec -it ${target} ${q(podName)} -c shell -- sh -c ${q(remote)} } ` +
@@ -232,6 +237,7 @@ export async function openNodeShell(nodeName: string) {
     if (lifecycle) {
       lifecycle.requestStop();
       await lifecycle.tick();
+      if (lifecycle.finished) record.status = "Closed";
     } else {
       record.status = "Failed";
     }

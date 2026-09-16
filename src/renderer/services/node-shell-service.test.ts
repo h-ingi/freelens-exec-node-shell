@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   send: vi.fn(),
   connected: vi.fn(),
+  terminalApi: vi.fn(),
+  enabled: vi.fn(),
   active: vi.fn(),
   permissions: vi.fn(),
   error: vi.fn(),
@@ -21,7 +23,7 @@ vi.mock("@freelensapp/extensions", () => ({
       createTerminalTab: () => ({ id: "test-tab" }),
       terminalStore: {
         isConnected: mocks.connected,
-        getTerminalApi: () => ({ isReady: true }),
+        getTerminalApi: mocks.terminalApi,
         sendCommand: mocks.send,
       },
     },
@@ -42,6 +44,7 @@ vi.mock("./rbac-service", () => ({
 }));
 
 vi.mock("./cleanup-service", () => ({
+  cleanupIsEnabled: mocks.enabled,
   localSessions: mocks.sessions,
   trackSession: (record: { lifecycle?: unknown }, lifecycle: unknown) => {
     record.lifecycle = lifecycle;
@@ -60,7 +63,35 @@ describe("node shell orchestration", () => {
     mocks.get.mockResolvedValue({ status: { phase: "Running", conditions: [{ type: "Ready", status: "True" }] } });
     mocks.remove.mockResolvedValue({});
     mocks.connected.mockReturnValue(true);
+    mocks.terminalApi.mockReturnValue({ isReady: true });
+    mocks.enabled.mockReturnValue(true);
     mocks.send.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("times out a registered connection whose shell never becomes ready", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("window", globalThis);
+    mocks.terminalApi.mockReturnValue({ isReady: false });
+    const opening = openNodeShell("test-node");
+    await vi.advanceTimersByTimeAsync(31_000);
+    await opening;
+    expect(mocks.remove).toHaveBeenCalledOnce();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it("cleans up when the extension is disabled while pod creation is in flight", async () => {
+    mocks.create.mockImplementation(async () => {
+      mocks.enabled.mockReturnValue(false);
+      return { metadata: { uid: "pod-uid" } };
+    });
+    await openNodeShell("test-node");
+    expect(mocks.remove).toHaveBeenCalledOnce();
+    expect(mocks.send).not.toHaveBeenCalled();
   });
 
   it("creates a privileged exec pod and sends a PowerShell 5.1 compatible command", async () => {
