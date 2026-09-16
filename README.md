@@ -139,6 +139,7 @@ FreeLens GUI / PowerShell 5.1 / EKS 검증은 단위 테스트와 별도로 수�
 - `src/renderer/pages/sessions-page.tsx`: 세션 관리 UI
 
 졸업 프로젝트 설명은 [기술 설명](docs/architecture.ko.md)을 참고하세요.
+기능별 브랜치, PR 검토 및 병합 순서는 [브랜치 운영 안내](docs/branches.ko.md)를 참고하세요.
 
 ## License
 

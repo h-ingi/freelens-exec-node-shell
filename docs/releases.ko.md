@@ -49,7 +49,8 @@ Artifact 보관 기간은 30일입니다. 만료되면 워크플로를 다시 �
 
 ## 관리자: 버전 배포
 
-현재 작업 PR을 검토·병합한 뒤 실제 Windows FreeLens 환경의 README 테스트 항목을 확인합니다.
+[브랜치 운영 안내](branches.ko.md)의 순서대로 단계별 PR을 최종 #1까지 검토·병합한 뒤,
+실제 Windows FreeLens 환경의 README 테스트 항목을 확인합니다.
 자동 단위 테스트 통과만으로 GUI/EKS 동작 검증이 끝나는 것은 아닙니다.
 
 1. 배포할 커밋에 `package.json` 버전을 확정하고 변경을 main에 반영합니다.
