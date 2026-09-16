@@ -1,7 +1,7 @@
 {
-  "name": "@freelensapp/example-extension",
-  "version": "1.10.2",
-  "description": "Example of a Freelens extension",
+  "name": "@h-ingi/freelens-exec-node-shell",
+  "version": "1.10.3-6",
+  "description": "FreeLens Node Shell using pods/exec instead of pods/attach",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/freelensapp/freelens-example-extension.git",
