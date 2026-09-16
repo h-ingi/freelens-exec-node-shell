@@ -15,7 +15,7 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0(@types/node@24.12.4)
       '@freelensapp/extensions':
-        specifier: ^1.10.2
+        specifier: 1.10.2
         version: 1.10.2(@emotion/react@11.14.0(@types/react@17.0.93)(react@17.0.2))(@types/react@17.0.93)
       '@testing-library/react':
         specifier: ^12.1.5

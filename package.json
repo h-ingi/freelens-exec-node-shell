@@ -1,10 +1,10 @@
 {
   "name": "@h-ingi/freelens-exec-node-shell",
-  "version": "1.10.3-6",
+  "version": "1.10.3-7",
   "description": "FreeLens Node Shell using pods/exec instead of pods/attach",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/freelensapp/freelens-example-extension.git",
+    "url": "git+https://github.com/h-ingi/freelens-exec-node-shell.git",
     "directory": "."
   },
   "main": "out/main/index.js",
@@ -14,7 +14,7 @@
   ],
   "engines": {
     "node": ">= 22.0.0",
-    "freelens": "^1.8.0"
+    "freelens": "^1.10.2"
   },
   "copyright": "© 2025-2026 Freelens Authors",
   "license": "MIT",
@@ -63,7 +63,7 @@
   "devDependencies": {
     "@babel/plugin-proposal-decorators": "^8.0.2",
     "@electron-toolkit/tsconfig": "^2.0.0",
-    "@freelensapp/extensions": "^1.10.2",
+    "@freelensapp/extensions": "1.10.2",
     "@testing-library/react": "^12.1.5",
     "@types/node": "~24.12.4",
     "@types/react": "^17.0.93",
