@@ -107,3 +107,14 @@ node node_modules/electron-vite/bin/electron-vite.js build
 ```
 
 이는 실제 Windows 런타임 검증을 대체하지 않습니다.
+
+## 패키지 배포
+
+GitHub Actions가 타입 검사, 단위 테스트, production 빌드를 마친 뒤 `.tgz`를 생성합니다.
+PR과 수동 실행은 30일 보관하는 시험용 Artifact를 만들고,
+`package.json` 버전과 일치하는 `v` 태그 push는 GitHub Releases에 패키지, SBOM, SHA-256을 게시합니다.
+사용자는 FreeLens에 완성된 패키지를 설치하므로 로컬 Node.js/pnpm 빌드가 필요하지 않습니다.
+배포는 npm 게시나 별도 npm 인증에 의존하지 않습니다.
+자세한 설치 및 운영 절차는 [배포 안내](releases.ko.md)를 참고하세요.
+
+이 자동화의 로컬 검증과 GitHub Actions 실제 실행, Windows GUI 검증은 서로 별개입니다.

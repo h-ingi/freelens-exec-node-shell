@@ -1,171 +1,119 @@
-name: Release
+name: Release packages
 
 on:
   push:
     tags:
       - v*
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
-  release:
-    name: release
-
-    runs-on: ubuntu-24.04-arm
-    environment: publishing
-
-    env:
-      VITE_PRESERVE_MODULES: "false"
-
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      artifact-name: node-shell-${{ steps.package.outputs.version }}-${{ github.run_id }}
     steps:
-      - name: Checkout plugin
+      - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      - name: Check if package version matches
-        run: test "${GITHUB_REF_NAME}" = "v$(yq -r .version package.json)"
-
-      - name: Setup node
+      - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
-          registry-url: https://registry.npmjs.org
 
-      - name: Upgrade npm
-        run: npm install -g npm@11
+      - name: Check version
+        id: package
+        shell: bash
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Tag must match package.json version: v$version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         run: corepack enable
 
-      - name: Get pnpm cache directory
-        shell: bash
-        run: echo "pnpm_cache_dir=$(pnpm store path)" >> ${GITHUB_ENV}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Use pnpm cache
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.pnpm_cache_dir }}
-          key: ubuntu-24.04-arm-node-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ubuntu-24.04-arm-node-
+      - name: Check types
+        run: pnpm type:check
 
-      - name: Install pnpm dependencies
-        id: install-pnpm
-        run: timeout 300 pnpm install --color=always --prefer-offline --frozen-lockfile
-        continue-on-error: true
+      - name: Test
+        run: pnpm test:unit
 
-      - name: Install pnpm dependencies (retry)
-        if: steps.install-pnpm.outcome == 'failure'
-        run: timeout 300 pnpm install --color=always --prefer-offline --frozen-lockfile
+      - name: Build production package
+        run: pnpm build:production
 
-      - name: Build packages
-        id: build-packages
-        run: pnpm --color=always --stream build
-        continue-on-error: true
-
-      - name: Build packages (retry)
-        id: build-packages-2
-        if: steps.build-packages.outcome == 'failure'
-        run: pnpm --color=always --stream build
-        continue-on-error: true
-
-      - name: Build packages (retry 2)
-        if: steps.build-packages-2.outcome == 'failure'
-        run: pnpm --color=always --stream build
-
-      - name: Pack packages
-        run: pnpm --color=always --stream pack
-
-      - name: Publish npm packages
-        id: publish-npm
+      - name: Pack
         run: |
-          case "${GITHUB_REF_NAME}" in
-            *-*) dist_tag=next;;
-            *) dist_tag=latest;;
-          esac
-          if [[ -n ${NPM_TOKEN:-} ]]; then
-            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
-          else
-            NPM_CONFIG_PROVENANCE=true pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
-          fi
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        continue-on-error: true
-
-      - name: Publish npm packages (retry)
-        id: publish-npm-2
-        if: steps.publish-npm.outcome == 'failure'
-        run: |
-          case "${GITHUB_REF_NAME}" in
-            *-*) dist_tag=next;;
-            *) dist_tag=latest;;
-          esac
-          if [[ -n ${NPM_TOKEN:-} ]]; then
-            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
-          else
-            NPM_CONFIG_PROVENANCE=true pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
-          fi
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        continue-on-error: true
-
-      - name: Publish npm packages (retry 2)
-        if: steps.publish-npm-2.outcome == 'failure'
-        run: |
-          case "${GITHUB_REF_NAME}" in
-            *-*) dist_tag=next;;
-            *) dist_tag=latest;;
-          esac
-          if [[ -n ${NPM_TOKEN:-} ]]; then
-            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
-          else
-            NPM_CONFIG_PROVENANCE=true pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
-          fi
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          mkdir -p dist/release
+          pnpm pack --pack-destination dist/release
 
       - name: Create SBOM
         uses: anchore/sbom-action@v0
         with:
           format: spdx-json
-          output-file: sbom.spdx.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          output-file: dist/release/sbom.spdx.json
+          upload-artifact: false
           upload-release-assets: false
 
-      - name: Normalize SBOM filename
-        shell: bash
-        run: |
-          for f in *.tgz; do
-            mv sbom.spdx.json "${f%.tgz}-spdx.json"
-          done
-
       - name: Make checksums
-        shell: bash
+        working-directory: dist/release
         run: |
-          for f in *.tgz *-spdx.json; do
-            sha256sum "$f" | tee "$f.sha256"
+          for file in *.tgz *.spdx.json; do
+            sha256sum "$file" > "$file.sha256"
           done
 
-      - name: Create release
+      - name: Upload installable package
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-shell-${{ steps.package.outputs.version }}-${{ github.run_id }}
+          path: dist/release/*
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified package
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: dist/release
+
+      - name: Verify checksums
+        working-directory: dist/release
+        run: sha256sum --check *.sha256
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: legacy
+          generate_release_notes: true
           fail_on_unmatched_files: true
-          files: |-
-            *.tgz
-            *.tgz.sha256
-            *-spdx.json
-            *-spdx.json.sha256
+          body: |
+            Assets의 `.tgz`를 다운로드하여 FreeLens Extensions 화면에서 설치하세요.
+            사용자 PC에서 Node.js/pnpm 설치나 빌드는 필요하지 않습니다.
+            `Source code (zip)`과 `Source code (tar.gz)`는 설치 파일이 아닙니다.
+            설치 및 업데이트: https://github.com/h-ingi/freelens-exec-node-shell/blob/${{ github.ref_name }}/docs/releases.ko.md
+          files: |
+            dist/release/*.tgz
+            dist/release/*.tgz.sha256
+            dist/release/*.spdx.json
+            dist/release/*.spdx.json.sha256

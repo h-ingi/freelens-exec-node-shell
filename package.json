@@ -10,7 +10,8 @@
   "main": "out/main/index.js",
   "renderer": "out/renderer/index.js",
   "files": [
-    "out/**/*"
+    "out/**/*",
+    "docs/**/*.md"
   ],
   "engines": {
     "node": ">= 22.0.0",
