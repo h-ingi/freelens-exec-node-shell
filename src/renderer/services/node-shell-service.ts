@@ -1,5 +1,6 @@
 import { Renderer } from "@freelensapp/extensions";
-import { nodeShellSettings, validateSettings } from "../../common/store/node-shell-settings";
+import { validateSettings } from "../../common/store/node-shell-settings";
+import { loadSettings } from "../settings/settings-client";
 import { cleanupIsEnabled, type LocalSession, localSessions, trackSession } from "./cleanup-service";
 import { checkPermissions, execAvailable, permissionSummary } from "./rbac-service";
 import { isNotFound, quotePowerShell, SessionLifecycle } from "./session-lifecycle";
@@ -13,7 +14,13 @@ export async function openNodeShell(nodeName: string) {
     return;
   }
 
-  const settings = nodeShellSettings.toJSON();
+  let settings;
+  try {
+    settings = await loadSettings();
+  } catch (error) {
+    Renderer.Component.Notifications.error(`Failed to load Node Shell settings: ${String(error)}`);
+    return;
+  }
   const settingsError = validateSettings(settings);
   if (settingsError) {
     Renderer.Component.Notifications.error(settingsError);

@@ -30,7 +30,7 @@ Extension은 해당 정책을 변경하지 않습니다.
 - 실패 및 timeout: Pod Ready 120초, terminal ready 30초, 세션 기본 60분입니다.
 - exec가 실제로 시작되지 않으면 컨테이너는 180초 후 종료하여 API 정리 대상으로 전환됩니다.
 - 삭제 실패: 실행 중 2초 간격으로 재시도합니다. 404는 이미 삭제된 것으로 처리합니다.
-- Preferences: namespace, image, timeout, Pod prefix를 저장합니다. 새 세션부터 적용됩니다.
+- Preferences: namespace, image, timeout, Pod prefix를 저장합니다. main의 저장 응답을 확인한 뒤 완료 문구를 표시하며, 새 세션은 main에서 최신 설정을 읽어 적용합니다.
 - **Node Shell Sessions**: Node/Pod, namespace, 상태, 시작 시각, 경과 시간, Stop을 표시합니다.
 - **Refresh / check permissions**: RBAC 표와 기존 Pod를 조회합니다. 발견한 Pod는 확인 후 Delete할 수 있습니다.
 - 시작 시 및 60초마다 종료/만료된 orphan Pod를 점검합니다.
