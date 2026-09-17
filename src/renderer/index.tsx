@@ -1,8 +1,9 @@
 import { Renderer } from "@freelensapp/extensions";
-import { nodeShellSettings, validateSettings } from "../common/store/node-shell-settings";
+import { validateSettings } from "../common/store/node-shell-settings";
 import { checkPermissions, execAvailable, permissionSummary } from "./services/rbac-service";
 import { isNotFound, quotePowerShell, SessionLifecycle } from "./services/session-lifecycle";
 import { NodeShellPreferenceHint, NodeShellPreferences } from "./settings/preferences";
+import { initializeSettingsClient, loadSettings } from "./settings/settings-client";
 
 type NodeMenuProps = Renderer.Component.KubeObjectMenuProps<Renderer.K8sApi.Node>;
 
@@ -16,7 +17,13 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
       return;
     }
 
-    const settings = nodeShellSettings.toJSON();
+    let settings;
+    try {
+      settings = await loadSettings();
+    } catch (error) {
+      Renderer.Component.Notifications.error(`Failed to load Node Shell settings: ${String(error)}`);
+      return;
+    }
     const settingsError = validateSettings(settings);
     if (settingsError) {
       Renderer.Component.Notifications.error(settingsError);
@@ -219,8 +226,9 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
 }
 
 export default class ExecNodeShellRenderer extends Renderer.LensExtension {
-  onActivate() {
-    nodeShellSettings.loadExtension(this);
+  async onActivate() {
+    initializeSettingsClient(this);
+    await loadSettings();
   }
   appPreferences = [
     {

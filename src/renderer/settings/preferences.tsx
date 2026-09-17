@@ -1,38 +1,72 @@
 import { Renderer } from "@freelensapp/extensions";
-import { runInAction } from "mobx";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { nodeShellSettings, validateSettings } from "../../common/store/node-shell-settings";
+import { loadSettings, saveSettings } from "./settings-client";
 
 export function NodeShellPreferences() {
   const [draft, setDraft] = useState(nodeShellSettings.toJSON());
   const [message, setMessage] = useState("");
-  const save = () => {
+  const [busy, setBusy] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    void loadSettings()
+      .then((settings) => {
+        if (mounted) {
+          setDraft(settings);
+          setLoaded(true);
+        }
+      })
+      .catch((error: unknown) => {
+        if (mounted) setMessage(`Failed to load settings: ${String(error)}`);
+      })
+      .finally(() => {
+        if (mounted) setBusy(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  const save = async () => {
     const error = validateSettings(draft);
     if (error) {
       setMessage(error);
       return;
     }
-    runInAction(() => {
-      nodeShellSettings.settings = {
-        ...draft,
-        knownNamespaces: [...new Set([...nodeShellSettings.settings.knownNamespaces, draft.namespace])],
-      };
-    });
-    setMessage("Saved. New sessions will use these settings.");
+    setBusy(true);
+    setMessage("");
+    try {
+      const saved = await saveSettings(draft);
+      setDraft(saved);
+      setMessage(`Saved. New sessions will use a ${saved.timeoutMinutes} minute timeout.`);
+    } catch (error) {
+      setMessage(`Failed to save settings: ${String(error)}`);
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <div style={{ display: "grid", gap: 12, maxWidth: 560 }}>
       <label>
         Namespace
-        <input value={draft.namespace} onChange={(event) => setDraft({ ...draft, namespace: event.target.value })} />
+        <input
+          disabled={busy || !loaded}
+          value={draft.namespace}
+          onChange={(event) => setDraft({ ...draft, namespace: event.target.value })}
+        />
       </label>
       <label>
         Container image
-        <input value={draft.image} onChange={(event) => setDraft({ ...draft, image: event.target.value })} />
+        <input
+          disabled={busy || !loaded}
+          value={draft.image}
+          onChange={(event) => setDraft({ ...draft, image: event.target.value })}
+        />
       </label>
       <label>
         Session timeout (minutes)
         <input
+          disabled={busy || !loaded}
           type="number"
           min={1}
           max={1440}
@@ -42,9 +76,19 @@ export function NodeShellPreferences() {
       </label>
       <label>
         Pod prefix
-        <input value={draft.podPrefix} onChange={(event) => setDraft({ ...draft, podPrefix: event.target.value })} />
+        <input
+          disabled={busy || !loaded}
+          value={draft.podPrefix}
+          onChange={(event) => setDraft({ ...draft, podPrefix: event.target.value })}
+        />
       </label>
-      <Renderer.Component.Button label="Save" onClick={save} />
+      <Renderer.Component.Button
+        label={busy ? "Please wait…" : "Save"}
+        disabled={busy || !loaded}
+        onClick={() => {
+          void save();
+        }}
+      />
       <p role="status">{message}</p>
     </div>
   );
