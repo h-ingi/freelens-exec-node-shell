@@ -31,8 +31,21 @@
 
 Pod 생성은 기존에 동작한 `Renderer.K8sApi.podsApi.create`를 유지합니다.
 이전에 실패했던 applyOnCluster로 되돌리지 않습니다.
-RBAC는 `KubeJsonApi.forCluster(clusterId)`로 명시적인 클러스터의
-`/apis/authorization.k8s.io/v1/selfsubjectaccessreviews`에 POST합니다.
+RBAC는 활성 클러스터 ID를 확인하고, 클러스터 프레임의 인증·TLS 설정을 가진
+FreeLens 요청 클라이언트로 `/apis/authorization.k8s.io/v1/selfsubjectaccessreviews`에 POST합니다.
+FreeLens 1.10.x 호환 어댑터는 비등록 `KubeApi`의 내부 `request`를 사용합니다.
+공개 생성자가 내부 객체를 반환하므로 `KubeApi`를 상속하지 않으며, `request.post`의 존재를 확인합니다.
+이 내부 계약은 FreeLens 업데이트 시 다시 검증해야 합니다.
+
+SelfSubjectAccessReview는 저장되는 리소스가 아니므로 응답에 `metadata.uid`, `name`,
+`resourceVersion`이 없어도 정상입니다. 일반 `KubeApi.create()`의 리소스 파서는 이런 응답을
+`null`로 바꾸므로, 권한 조회는 원본 응답의 `status.allowed`가 boolean인지 직접 검사합니다.
+필수 권한의 `false`는 Denied, 누락·잘못된 타입·요청 실패는 Unknown으로 표시하고 실행을 차단합니다.
+Unknown은 권한 부족이 확정되었다는 뜻이 아닙니다.
+
+`1.10.3-10`에서는 설치된 FreeLens API 구현을 사용하는 회귀 테스트로 기존 파서의 응답 손실과
+수정 경로를 검증했습니다. 타입 검사·자동 테스트·패키지 빌드 통과와 별개로,
+Windows FreeLens에서 실제 클러스터에 연결하는 기능 검증은 필요합니다.
 
 Ready polling으로 kubectl wait의 watch 의존성을 제거했습니다.
 원격 wrapper는 nsenter가 종료되면 컨테이너에 `/tmp/exec-ended`를 만듭니다.
