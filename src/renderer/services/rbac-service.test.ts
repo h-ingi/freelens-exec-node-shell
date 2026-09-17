@@ -1,13 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ post: vi.fn(), construct: vi.fn() }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), construct: vi.fn(), active: vi.fn() }));
 
 vi.mock("@freelensapp/extensions", () => ({
   Renderer: {
+    Catalog: { getActiveCluster: mocks.active },
     K8sApi: {
-      // Deliberately omit forCluster: the runtime legacy wrapper is not callable.
-      KubeJsonApi: class {
-        post = mocks.post;
+      KubeObject: class {},
+      KubeApi: class {
+        create = mocks.create;
         constructor(...args: unknown[]) {
           mocks.construct(...args);
         }
@@ -16,28 +17,27 @@ vi.mock("@freelensapp/extensions", () => ({
   },
 }));
 
-import { checkPermissions, execAvailable } from "./rbac-service";
+import { checkPermissions, execAvailable, permissionSummary } from "./rbac-service";
 
-describe("RBAC requests through the renderer cluster proxy", () => {
+describe("RBAC reviews using the cluster frame client", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.stubGlobal("window", { location: { port: "63983", host: "window.renderer.freelens.app:63983" } });
-    mocks.post.mockResolvedValue({ status: { allowed: true } });
+    mocks.active.mockReturnValue({ id: "cluster-a" });
+    mocks.create.mockResolvedValue({ status: { allowed: true } });
   });
 
-  afterEach(() => vi.unstubAllGlobals());
-
-  it("routes requests to the selected cluster without a static forCluster function", async () => {
+  it("uses the host client without constructing a proxy URL or TLS client", async () => {
     const results = await checkPermissions("cluster-a", "shell-test");
-    expect(mocks.construct).toHaveBeenCalledWith(
-      { serverAddress: "https://127.0.0.1:63983", apiBase: "/api-kube" },
-      { headers: { Host: "cluster-a.window.renderer.freelens.app:63983" } },
-    );
-    expect(mocks.post).toHaveBeenCalledTimes(6);
-    expect(mocks.post).toHaveBeenCalledWith("/apis/authorization.k8s.io/v1/selfsubjectaccessreviews", {
-      data: {
-        apiVersion: "authorization.k8s.io/v1",
-        kind: "SelfSubjectAccessReview",
+    const options = mocks.construct.mock.calls[0][0];
+    expect(options.autoRegister).toBe(false);
+    expect(options.request).toBeUndefined();
+    expect(options.objectConstructor.kind).toBe("SelfSubjectAccessReview");
+    expect(options.objectConstructor.namespaced).toBe(false);
+    expect(options.objectConstructor.apiBase).toBe("/apis/authorization.k8s.io/v1/selfsubjectaccessreviews");
+    expect(mocks.create).toHaveBeenCalledTimes(6);
+    expect(mocks.create).toHaveBeenCalledWith(
+      {},
+      {
         spec: {
           resourceAttributes: {
             group: "",
@@ -48,21 +48,41 @@ describe("RBAC requests through the renderer cluster proxy", () => {
           },
         },
       },
-    });
+    );
     expect(execAvailable(results)).toBe(true);
   });
 
-  it("does not permit execution when a required review fails", async () => {
-    mocks.post.mockRejectedValue(new Error("Forbidden"));
+  it("blocks stale cluster requests before sending a review", async () => {
+    mocks.active.mockReturnValue({ id: "cluster-b" });
+    await expect(checkPermissions("cluster-a", "shell-test")).rejects.toThrow("Active cluster changed");
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("preserves connection failures in the displayed summary and blocks execution", async () => {
+    mocks.create.mockRejectedValue(new Error("connect ECONNREFUSED"));
     const results = await checkPermissions("cluster-a", "shell-test");
     expect(execAvailable(results)).toBe(false);
-    expect(results.every((result) => result.allowed === undefined && result.reason.includes("Forbidden"))).toBe(true);
+    expect(permissionSummary(results)).toContain("pods/create: Unknown (Error: connect ECONNREFUSED)");
+  });
+
+  it("does not confuse a denied permission with a failed review", async () => {
+    mocks.create.mockResolvedValue({ status: { allowed: false, reason: "policy denied" } });
+    const results = await checkPermissions("cluster-a", "shell-test");
+    expect(execAvailable(results)).toBe(false);
+    expect(permissionSummary(results)).toContain("pods/create: Denied (policy denied)");
+  });
+
+  it("blocks missing review decisions", async () => {
+    mocks.create.mockResolvedValue(null);
+    const results = await checkPermissions("cluster-a", "shell-test");
+    expect(execAvailable(results)).toBe(false);
+    expect(permissionSummary(results)).toContain("Permission review returned no allowed decision");
   });
 
   it("allows exec when only optional attach and list permissions are denied", async () => {
-    mocks.post.mockImplementation(async (_path, { data }) => ({
+    mocks.create.mockImplementation(async (_metadata, { spec }) => ({
       status: {
-        allowed: data.spec.resourceAttributes.subresource !== "attach" && data.spec.resourceAttributes.verb !== "list",
+        allowed: spec.resourceAttributes.subresource !== "attach" && spec.resourceAttributes.verb !== "list",
       },
     }));
     expect(execAvailable(await checkPermissions("cluster-a", "shell-test"))).toBe(true);
