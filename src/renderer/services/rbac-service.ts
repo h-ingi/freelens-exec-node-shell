@@ -16,29 +16,51 @@ export const permissions = [
   { verb: "list", resource: "pods", label: "pods/list (orphan cleanup)", required: false },
 ] as const;
 
+interface ReviewStatus {
+  allowed?: boolean;
+  reason?: string;
+  evaluationError?: string;
+}
+
+interface ReviewSpec {
+  resourceAttributes: {
+    group: string;
+    namespace: string;
+    verb: string;
+    resource: string;
+    subresource?: string;
+  };
+}
+
+class SelfSubjectAccessReview extends Renderer.K8sApi.KubeObject<
+  Renderer.K8sApi.KubeObjectMetadata,
+  ReviewStatus,
+  ReviewSpec
+> {
+  static readonly kind = "SelfSubjectAccessReview";
+  static readonly namespaced = false;
+  static readonly apiBase = "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews";
+}
+
 export async function checkPermissions(clusterId: string, namespace: string): Promise<PermissionResult[]> {
-  // Match FreeLens renderer cluster routing without the legacy forCluster wrapper.
-  const api = new Renderer.K8sApi.KubeJsonApi(
-    { serverAddress: `https://127.0.0.1:${window.location.port}`, apiBase: "/api-kube" },
-    { headers: { Host: `${clusterId}.${window.location.host}` } },
-  );
+  if (Renderer.Catalog.getActiveCluster()?.id !== clusterId) {
+    throw new Error("Active cluster changed before permission check; retry from the target cluster.");
+  }
+  // Reuse the cluster frame's authenticated client, including its TLS and routing configuration.
+  const api = new Renderer.K8sApi.KubeApi({ objectConstructor: SelfSubjectAccessReview, autoRegister: false });
   return Promise.all(
     permissions.map(async (permission) => {
       try {
-        const result = await api.post<{ status?: { allowed?: boolean; reason?: string; evaluationError?: string } }>(
-          "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews",
+        const result = await api.create(
+          {},
           {
-            data: {
-              apiVersion: "authorization.k8s.io/v1",
-              kind: "SelfSubjectAccessReview",
-              spec: {
-                resourceAttributes: {
-                  group: "",
-                  namespace,
-                  verb: permission.verb,
-                  resource: permission.resource,
-                  ...("subresource" in permission ? { subresource: permission.subresource } : {}),
-                },
+            spec: {
+              resourceAttributes: {
+                group: "",
+                namespace,
+                verb: permission.verb,
+                resource: permission.resource,
+                ...("subresource" in permission ? { subresource: permission.subresource } : {}),
               },
             },
           },
@@ -46,8 +68,11 @@ export async function checkPermissions(clusterId: string, namespace: string): Pr
         return {
           label: permission.label,
           required: permission.required,
-          allowed: result.status?.allowed,
-          reason: result.status?.reason || result.status?.evaluationError || "",
+          allowed: result?.status?.allowed,
+          reason:
+            result?.status?.reason ||
+            result?.status?.evaluationError ||
+            (typeof result?.status?.allowed === "boolean" ? "" : "Permission review returned no allowed decision"),
         };
       } catch (error) {
         return { label: permission.label, required: permission.required, allowed: undefined, reason: String(error) };
@@ -64,7 +89,7 @@ export function permissionSummary(results: PermissionResult[]): string {
   return results
     .map(
       (result) =>
-        `${result.label}: ${result.allowed === undefined ? "Unknown" : result.allowed ? "Allowed" : "Denied"}`,
+        `${result.label}: ${result.allowed === undefined ? "Unknown" : result.allowed ? "Allowed" : "Denied"}${result.reason ? ` (${result.reason})` : ""}`,
     )
     .join("\n");
 }
