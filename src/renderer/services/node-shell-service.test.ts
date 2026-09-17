@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  settings: vi.fn(),
   create: vi.fn(),
   get: vi.fn(),
   remove: vi.fn(),
@@ -51,12 +52,20 @@ vi.mock("./cleanup-service", () => ({
   },
 }));
 
+vi.mock("../settings/settings-client", () => ({ loadSettings: mocks.settings }));
+
 import { openNodeShell } from "./node-shell-service";
 
 describe("node shell orchestration", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.sessions.clear();
+    mocks.settings.mockResolvedValue({
+      namespace: "kube-system",
+      image: "alpine",
+      timeoutMinutes: 60,
+      podPrefix: "test",
+    });
     mocks.active.mockReturnValue({ id: "cluster-a", contextName: "test-context" });
     mocks.permissions.mockResolvedValue([true]);
     mocks.create.mockResolvedValue({ metadata: { uid: "pod-uid" } });
@@ -71,6 +80,32 @@ describe("node shell orchestration", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("uses the acknowledged one-minute setting for both pod deadline and cleanup", async () => {
+    vi.useFakeTimers();
+    mocks.settings.mockResolvedValue({
+      namespace: "kube-system",
+      image: "alpine",
+      timeoutMinutes: 1,
+      podPrefix: "test",
+    });
+    await openNodeShell("test-node");
+    expect(mocks.create.mock.calls[0][1].spec.activeDeadlineSeconds).toBe(60);
+    const record = [...mocks.sessions.values()][0];
+    await vi.advanceTimersByTimeAsync(59_000);
+    await record.lifecycle.tick();
+    expect(mocks.remove).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+    await record.lifecycle.tick();
+    expect(mocks.remove).toHaveBeenCalledOnce();
+  });
+
+  it("blocks creation when the main settings cannot be read", async () => {
+    mocks.settings.mockRejectedValue(new Error("settings unavailable"));
+    await openNodeShell("test-node");
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.error).toHaveBeenCalledWith(expect.stringContaining("Failed to load Node Shell settings"));
   });
 
   it("times out a registered connection whose shell never becomes ready", async () => {

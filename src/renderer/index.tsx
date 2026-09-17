@@ -1,13 +1,14 @@
 import { Renderer } from "@freelensapp/extensions";
-import { nodeShellSettings } from "../common/store/node-shell-settings";
 import { ExecNodeShellMenu } from "./menus/exec-node-shell-menu";
 import { SessionsPage } from "./pages/sessions-page";
 import { shutdownCleanup, startCleanup } from "./services/cleanup-service";
 import { NodeShellPreferenceHint, NodeShellPreferences } from "./settings/preferences";
+import { initializeSettingsClient, loadSettings } from "./settings/settings-client";
 
 export default class ExecNodeShellRenderer extends Renderer.LensExtension {
-  onActivate() {
-    nodeShellSettings.loadExtension(this);
+  async onActivate() {
+    initializeSettingsClient(this);
+    await loadSettings();
     startCleanup();
   }
   onDeactivate() {
