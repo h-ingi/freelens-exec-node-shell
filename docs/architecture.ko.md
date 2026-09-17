@@ -31,8 +31,21 @@
 
 Pod 생성은 기존에 동작한 `Renderer.K8sApi.podsApi.create`를 유지합니다.
 이전에 실패했던 applyOnCluster로 되돌리지 않습니다.
-RBAC는 `KubeJsonApi.forCluster(clusterId)`로 명시적인 클러스터의
-`/apis/authorization.k8s.io/v1/selfsubjectaccessreviews`에 POST합니다.
+RBAC는 활성 클러스터 ID를 확인하고, 클러스터 프레임의 인증·TLS 설정을 가진
+FreeLens 요청 클라이언트로 `/apis/authorization.k8s.io/v1/selfsubjectaccessreviews`에 POST합니다.
+FreeLens 1.10.x 호환 어댑터는 비등록 `KubeApi`의 내부 `request`를 사용합니다.
+공개 생성자가 내부 객체를 반환하므로 `KubeApi`를 상속하지 않으며, `request.post`의 존재를 확인합니다.
+이 내부 계약은 FreeLens 업데이트 시 다시 검증해야 합니다.
+
+SelfSubjectAccessReview는 저장되는 리소스가 아니므로 응답에 `metadata.uid`, `name`,
+`resourceVersion`이 없어도 정상입니다. 일반 `KubeApi.create()`의 리소스 파서는 이런 응답을
+`null`로 바꾸므로, 권한 조회는 원본 응답의 `status.allowed`가 boolean인지 직접 검사합니다.
+필수 권한의 `false`는 Denied, 누락·잘못된 타입·요청 실패는 Unknown으로 표시하고 실행을 차단합니다.
+Unknown은 권한 부족이 확정되었다는 뜻이 아닙니다.
+
+`1.10.3-10`에서는 설치된 FreeLens API 구현을 사용하는 회귀 테스트로 기존 파서의 응답 손실과
+수정 경로를 검증했습니다. 타입 검사·자동 테스트·패키지 빌드 통과와 별개로,
+Windows FreeLens에서 실제 클러스터에 연결하는 기능 검증은 필요합니다.
 
 Ready polling으로 kubectl wait의 watch 의존성을 제거했습니다.
 원격 wrapper는 nsenter가 종료되면 컨테이너에 `/tmp/exec-ended`를 만듭니다.
@@ -107,3 +120,19 @@ node node_modules/electron-vite/bin/electron-vite.js build
 ```
 
 이는 실제 Windows 런타임 검증을 대체하지 않습니다.
+
+## 패키지 배포
+
+GitHub Actions가 타입 검사, 단위 테스트, production 빌드를 마친 뒤 `.tgz`를 생성합니다.
+PR과 수동 실행은 30일 보관하는 시험용 Artifact를 만들고,
+`package.json` 버전과 일치하는 `v` 태그 push는 GitHub Releases에 패키지, SBOM, SHA-256을 게시합니다.
+사용자는 FreeLens에 완성된 패키지를 설치하므로 로컬 Node.js/pnpm 빌드가 필요하지 않습니다.
+배포는 npm 게시나 별도 npm 인증에 의존하지 않습니다.
+자세한 설치 및 운영 절차는 [배포 안내](releases.ko.md)를 참고하세요.
+
+이 자동화의 로컬 검증과 GitHub Actions 실제 실행, Windows GUI 검증은 서로 별개입니다.
+
+## 기능별 개발 이력
+
+수명 관리, RBAC, 설정, 세션·orphan 정리, 기술 문서, 배포 자동화를 순차 브랜치와 PR로 분리했습니다.
+기존 커밋과 최종 구현은 보존합니다. [브랜치 운영 안내](branches.ko.md)에서 단계별 역할과 검토·병합 순서를 확인할 수 있습니다.
