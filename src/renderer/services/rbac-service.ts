@@ -17,7 +17,11 @@ export const permissions = [
 ] as const;
 
 export async function checkPermissions(clusterId: string, namespace: string): Promise<PermissionResult[]> {
-  const api = Renderer.K8sApi.KubeJsonApi.forCluster(clusterId);
+  // Match FreeLens renderer cluster routing without the legacy forCluster wrapper.
+  const api = new Renderer.K8sApi.KubeJsonApi(
+    { serverAddress: `https://127.0.0.1:${window.location.port}`, apiBase: "/api-kube" },
+    { headers: { Host: `${clusterId}.${window.location.host}` } },
+  );
   return Promise.all(
     permissions.map(async (permission) => {
       try {
