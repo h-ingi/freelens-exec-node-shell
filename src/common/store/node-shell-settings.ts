@@ -1,5 +1,5 @@
 import { Common } from "@freelensapp/extensions";
-import { makeObservable, observable } from "mobx";
+import { action, makeObservable, observable } from "mobx";
 
 export interface NodeShellSettings {
   namespace: string;
@@ -31,11 +31,11 @@ export function validateSettings(settings: NodeShellSettings): string | undefine
 }
 
 export class NodeShellSettingsStore extends Common.Store.ExtensionStore<NodeShellSettings> {
-  @observable settings: NodeShellSettings = { ...defaults };
+  settings: NodeShellSettings = { ...defaults };
 
   constructor() {
     super({ configName: "node-shell-settings", defaults });
-    makeObservable(this);
+    makeObservable(this, { settings: observable, fromStore: action });
   }
 
   fromStore(data: Partial<NodeShellSettings>): void {

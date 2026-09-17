@@ -68,7 +68,12 @@ label 하나만 보고 모두 삭제하지 않고 phase 또는 deadline을 확�
 발견한 Pod 삭제에는 UID precondition을 사용합니다.
 pods/list는 확장 기능이며 로컬 단일 세션의 실행 조건은 아닙니다.
 
-Common.Store.ExtensionStore를 main/renderer에 등록합니다.
+Common.Store.ExtensionStore는 main 프로세스에만 등록하여 설정 저장의 기준으로 사용합니다.
+Preferences의 Save는 확장 전용 IPC로 main에 저장을 요청하고, 성공 응답 후에만 완료 문구를 표시합니다.
+클러스터 renderer는 새 세션마다 main에서 최신 설정을 조회합니다. 조회 실패 시 생성하지 않습니다.
+renderer의 이전 메모리 값이 main의 최신 설정을 덮어쓰지 않도록 renderer에서는 저장소 동기화를 시작하지 않습니다.
+`1.10.3-11`에서 별도 renderer 간 설정 전달, 저장 실패, 저장소 재로드 및 1분 제한시간을 테스트했습니다.
+실제 환경의 제한시간·재시작 검증은 별도로 수행해야 합니다.
 기본값은 kube-system, docker.io/library/alpine, 60분, node-shell-exec입니다.
 namespace/prefix 형식, image 공백, timeout 범위를 검증합니다.
 세션 시작 시 설정을 복사하므로 기존 세션은 원래 namespace/timeout을 유지합니다.
