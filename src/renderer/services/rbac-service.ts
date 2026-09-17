@@ -48,12 +48,20 @@ export async function checkPermissions(clusterId: string, namespace: string): Pr
   }
   // Reuse the cluster frame's authenticated client, including its TLS and routing configuration.
   const api = new Renderer.K8sApi.KubeApi({ objectConstructor: SelfSubjectAccessReview, autoRegister: false });
+  // Compatibility adapter for FreeLens 1.10.x: SSAR is not a persisted KubeObject.
+  // KubeApi.create() discards responses without uid/name/resourceVersion. Use the
+  // same host-owned transport directly; do not synthesize resource metadata.
+  const request = api["request"];
+  if (!request || typeof request.post !== "function") {
+    throw new Error("FreeLens cluster request client is unavailable for permission reviews.");
+  }
   return Promise.all(
     permissions.map(async (permission) => {
       try {
-        const result = await api.create(
-          {},
-          {
+        const result: unknown = await request.post(SelfSubjectAccessReview.apiBase, {
+          data: {
+            apiVersion: "authorization.k8s.io/v1",
+            kind: SelfSubjectAccessReview.kind,
             spec: {
               resourceAttributes: {
                 group: "",
@@ -64,15 +72,31 @@ export async function checkPermissions(clusterId: string, namespace: string): Pr
               },
             },
           },
-        );
+        });
+        const status = result && typeof result === "object" && "status" in result ? result.status : undefined;
+        const allowed =
+          status && typeof status === "object" && "allowed" in status && typeof status.allowed === "boolean"
+            ? status.allowed
+            : undefined;
+        const reason =
+          status && typeof status === "object" && "reason" in status && typeof status.reason === "string"
+            ? status.reason
+            : "";
+        const evaluationError =
+          status &&
+          typeof status === "object" &&
+          "evaluationError" in status &&
+          typeof status.evaluationError === "string"
+            ? status.evaluationError
+            : "";
         return {
           label: permission.label,
           required: permission.required,
-          allowed: result?.status?.allowed,
+          allowed,
           reason:
-            result?.status?.reason ||
-            result?.status?.evaluationError ||
-            (typeof result?.status?.allowed === "boolean" ? "" : "Permission review returned no allowed decision"),
+            reason ||
+            evaluationError ||
+            (allowed === undefined ? "Permission review returned no allowed decision" : ""),
         };
       } catch (error) {
         return { label: permission.label, required: permission.required, allowed: undefined, reason: String(error) };
