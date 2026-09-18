@@ -1,9 +1,10 @@
 import { Renderer } from "@freelensapp/extensions";
+import { validateSettings } from "../common/store/node-shell-settings";
 import { checkPermissions, execAvailable, permissionSummary } from "./services/rbac-service";
 import { isNotFound, quotePowerShell, SessionLifecycle } from "./services/session-lifecycle";
-
-const NAMESPACE = "kube-system";
-const NODE_SHELL_IMAGE = "docker.io/library/alpine";
+import { nodeShellRemoteCommand } from "./services/shell-command";
+import { NodeShellPreferenceHint, NodeShellPreferences } from "./settings/preferences";
+import { initializeSettingsClient, loadSettings } from "./settings/settings-client";
 
 type NodeMenuProps = Renderer.Component.KubeObjectMenuProps<Renderer.K8sApi.Node>;
 
@@ -17,8 +18,22 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
       return;
     }
 
+    let settings;
+    try {
+      settings = await loadSettings();
+    } catch (error) {
+      Renderer.Component.Notifications.error(`Failed to load Node Shell settings: ${String(error)}`);
+      return;
+    }
+    const settingsError = validateSettings(settings);
+    if (settingsError) {
+      Renderer.Component.Notifications.error(settingsError);
+      return;
+    }
+    const NAMESPACE = settings.namespace;
+    const NODE_SHELL_IMAGE = settings.image;
     const nodeName = object.getName();
-    const podName = `node-shell-exec-${crypto.randomUUID()}`;
+    const podName = `${settings.podPrefix}-${crypto.randomUUID()}`;
 
     const podManifest = {
       apiVersion: "v1",
@@ -40,7 +55,7 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
         terminationGracePeriodSeconds: 0,
 
         // 1시간 후에는 강제로 종료
-        activeDeadlineSeconds: 3600,
+        activeDeadlineSeconds: settings.timeoutMinutes * 60,
 
         // Node namespace 접근
         hostPID: true,
@@ -153,7 +168,7 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
           now: Date.now,
           onError: (error) => console.error("[Exec Node Shell] Cleanup will retry", error),
         },
-        3600_000,
+        settings.timeoutMinutes * 60_000,
       );
       const session = lifecycle;
       const timer = window.setInterval(() => {
@@ -165,7 +180,7 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
       stage = "sending exec command";
       const q = quotePowerShell;
       const target = `--context ${q(cluster.contextName)} -n ${q(NAMESPACE)}`;
-      const remote = 'nsenter -t 1 -m -u -i -n -p -- /bin/sh; result=$?; touch /tmp/exec-ended; exit "$result"';
+      const remote = nodeShellRemoteCommand(nodeName);
       const command =
         `Write-Host ${q(`=== Node Shell: ${nodeName} ===`)}; ` +
         `try { kubectl exec -it ${target} ${q(podName)} -c shell -- sh -c ${q(remote)} } ` +
@@ -212,6 +227,20 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
 }
 
 export default class ExecNodeShellRenderer extends Renderer.LensExtension {
+  constructor(extension: ConstructorParameters<typeof Renderer.LensExtension>[0]) {
+    super(extension);
+    // Preferences registration can be used before the activation callback.
+    initializeSettingsClient(this);
+  }
+  async onActivate() {
+    await loadSettings();
+  }
+  appPreferences = [
+    {
+      title: "freelens-exec-node-shell",
+      components: { Input: NodeShellPreferences, Hint: NodeShellPreferenceHint },
+    },
+  ];
   kubeObjectMenuItems = [
     {
       kind: "Node",

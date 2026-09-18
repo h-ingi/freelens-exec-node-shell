@@ -197,3 +197,10 @@ pnpm build
 Copyright (c) 2025-2026 Freelens Authors.
 
 [MIT License](https://opensource.org/licenses/MIT)
+
+## 화면 개선
+
+확장 이름과 설정 제목은 `freelens-exec-node-shell`입니다. 설정 화면은 FreeLens 기본 Input을 사용합니다.
+기본 제한시간은 60분이며 활동 여부와 관계없이 시작부터 계산합니다. 기존 저장값은 유지합니다.
+셸 프롬프트는 `노드명:/현재/경로 #`이며 `cd`하면 경로가 바뀝니다.
+이전 scoped 확장은 비활성화하고 새 확장만 활성화하세요. 설정 저장 경로는 이전과 동일하게 유지합니다.
