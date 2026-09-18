@@ -1,6 +1,11 @@
 import { Renderer } from "@freelensapp/extensions";
 import { SETTINGS_GET, SETTINGS_SAVE } from "../../common/settings-channels";
-import { type NodeShellSettings, nodeShellSettings, validateSettings } from "../../common/store/node-shell-settings";
+import {
+  decodeSettings,
+  encodeSettings,
+  type NodeShellSettings,
+  nodeShellSettings,
+} from "../../common/store/node-shell-settings";
 
 class SettingsRendererIpc extends Renderer.Ipc {}
 let ipc: SettingsRendererIpc | undefined;
@@ -11,9 +16,9 @@ export function initializeSettingsClient(extension: Renderer.LensExtension): voi
 
 async function requestSettings(channel: string, settings?: NodeShellSettings): Promise<NodeShellSettings> {
   if (!ipc) throw new Error("Node Shell settings client is not initialized.");
-  const result: NodeShellSettings = await ipc.invoke(channel, ...(settings ? [settings] : []));
-  const error = validateSettings(result);
-  if (error) throw new Error(`Invalid settings received from main: ${error}`);
+  // Electron cannot clone MobX proxies. Transfer validated JSON text in both directions.
+  const payload: unknown = await ipc.invoke(channel, ...(settings ? [encodeSettings(settings)] : []));
+  const result = decodeSettings(payload);
   nodeShellSettings.fromStore(result);
   return nodeShellSettings.toJSON();
 }

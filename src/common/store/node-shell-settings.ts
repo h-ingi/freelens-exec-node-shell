@@ -30,6 +30,42 @@ export function validateSettings(settings: NodeShellSettings): string | undefine
   return undefined;
 }
 
+// Copy only the supported scalar fields and array values, never reactive proxies
+// or extra properties supplied by a host wrapper or an older config file.
+export function settingsSnapshot(value: unknown): NodeShellSettings {
+  if (!value || typeof value !== "object") throw new Error("Settings must be an object.");
+  const source = value as Partial<NodeShellSettings>;
+  if (
+    typeof source.namespace !== "string" ||
+    typeof source.image !== "string" ||
+    typeof source.timeoutMinutes !== "number" ||
+    typeof source.podPrefix !== "string" ||
+    !Array.isArray(source.knownNamespaces) ||
+    !source.knownNamespaces.every((item) => typeof item === "string")
+  ) {
+    throw new Error("Settings contain missing or invalid fields.");
+  }
+  const snapshot: NodeShellSettings = {
+    namespace: source.namespace,
+    image: source.image,
+    timeoutMinutes: source.timeoutMinutes,
+    podPrefix: source.podPrefix,
+    knownNamespaces: Array.from(source.knownNamespaces),
+  };
+  const error = validateSettings(snapshot);
+  if (error) throw new Error(error);
+  return snapshot;
+}
+
+export function encodeSettings(settings: unknown): string {
+  return JSON.stringify(settingsSnapshot(settings));
+}
+
+export function decodeSettings(payload: unknown): NodeShellSettings {
+  if (typeof payload !== "string") throw new Error("Settings IPC response must be JSON text.");
+  return settingsSnapshot(JSON.parse(payload));
+}
+
 export class NodeShellSettingsStore extends Common.Store.ExtensionStore<NodeShellSettings> {
   settings: NodeShellSettings = { ...defaults };
 
@@ -39,12 +75,15 @@ export class NodeShellSettingsStore extends Common.Store.ExtensionStore<NodeShel
   }
 
   fromStore(data: Partial<NodeShellSettings>): void {
-    const next = { ...defaults, ...data };
-    this.settings = validateSettings(next) ? { ...defaults } : next;
+    try {
+      this.settings = settingsSnapshot({ ...defaults, ...data });
+    } catch {
+      this.settings = settingsSnapshot(defaults);
+    }
   }
 
   toJSON(): NodeShellSettings {
-    return { ...this.settings, knownNamespaces: [...this.settings.knownNamespaces] };
+    return settingsSnapshot(this.settings);
   }
 }
 
