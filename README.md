@@ -1,202 +1,135 @@
-# @freelensapp/example-extension
+# FreeLens Exec Node Shell
 
-<!-- markdownlint-disable MD013 -->
+FreeLens 본체를 수정하지 않고 `pods/exec`로 Linux Node shell에 접속하는 Extension입니다.
+Node 우클릭 메뉴에서 **Exec Node Shell**을 선택합니다.
 
-[![Home](https://img.shields.io/badge/%F0%9F%8F%A0-freelens.app-02a7a0)](https://freelens.app)
-[![GitHub](https://img.shields.io/github/stars/freelensapp/freelens?style=flat&label=GitHub%20%E2%AD%90)](https://github.com/freelensapp/freelens)
-[![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/freelensapp/freelens-example-extension)
-[![Release](https://img.shields.io/github/v/release/freelensapp/freelens-example-extension?display_name=tag&sort=semver)](https://github.com/freelensapp/freelens-example-extension)
-[![Integration tests](https://github.com/freelensapp/freelens-example-extension/actions/workflows/integration-tests.yaml/badge.svg?branch=main)](https://github.com/freelensapp/freelens-example-extension/actions/workflows/integration-tests.yaml)
-[![npm](https://img.shields.io/npm/v/@freelensapp/example-extension.svg)](https://www.npmjs.com/package/@freelensapp/example-extension)
+대상 환경: **FreeLens 1.10.2 / Windows PowerShell 5.1 / Linux Kubernetes Node**.
+개발 의존성 `@freelensapp/extensions`는 1.10.2에 고정했습니다.
+현재 터미널 명령 생성기는 PowerShell용이며 bash/zsh 로컬 터미널은 지원하지 않습니다.
+Node 내부 shell은 `/bin/sh`입니다.
 
-<!-- markdownlint-enable MD013 -->
+## 동작
 
-## Overview
+1. SelfSubjectAccessReview로 대상 namespace의 RBAC를 확인합니다.
+2. 선택한 Node에 임시 privileged Pod를 생성합니다.
+3. Pod Ready를 API로 최대 120초 대기합니다. `kubectl wait`는 사용하지 않습니다.
+4. 터미널 shell 준비를 최대 30초 대기합니다.
+5. `kubectl exec`와 `nsenter`로 Node namespace에 진입합니다.
+6. 정상 종료, 터미널 X, 연결 실패, 제한시간 도달 시 Pod를 정리합니다.
 
-This repository serves as an example and template for building and publishing
-extensions for the [Freelens](https://freelens.app) application.
+`pods/attach` 권한을 추가하거나 사용하지 않습니다.
+단, **privileged Pod와 host namespace를 사용하므로 사실상 Node 관리자 접근**입니다.
+attach 권한이 필요 없다는 뜻이지, Node 접근 자체의 권한이 낮아진다는 뜻은 아닙니다.
+RBAC가 허용돼도 Pod Security Admission 등의 admission 정책은 Pod 생성을 거부할 수 있습니다.
+Extension은 해당 정책을 변경하지 않습니다.
 
-It demonstrates how to add support for custom Kubernetes resources by
-implementing cluster pages, list views, and detail panels for Custom Resource
-Definitions (CRDs). Each resource is accessible from the Freelens sidebar,
-with status conditions, spec fields, and related objects displayed in the
-detail view.
+## 기능
 
-Notable patterns demonstrated in this repository:
+- 정상 `exit`: 원격 종료 표식으로 keep-alive를 종료하고 터미널 finally와 API 감시가 삭제합니다.
+- 터미널 X: terminal store에서 연결이 제거되면 API로 삭제합니다.
+- 실패 및 timeout: Pod Ready 120초, terminal ready 30초, 세션 기본 60분입니다.
+- exec가 실제로 시작되지 않으면 컨테이너는 180초 후 종료하여 API 정리 대상으로 전환됩니다.
+- 삭제 실패: 실행 중 2초 간격으로 재시도합니다. 404는 이미 삭제된 것으로 처리합니다.
+- Preferences: namespace, image, timeout, Pod prefix를 저장합니다. main의 저장 응답을 확인한 뒤 완료 문구를 표시하며, 새 세션은 main에서 최신 설정을 읽어 적용합니다.
+- **Node Shell Sessions**: Node/Pod, namespace, 상태, 시작 시각, 경과 시간, Stop을 표시합니다.
+- **Refresh / check permissions**: RBAC 표와 기존 Pod를 조회합니다. 발견한 Pod는 확인 후 Delete할 수 있습니다.
+- 시작 시 및 60초마다 종료/만료된 orphan Pod를 점검합니다.
 
-- **Multiple API versions of the same CRD** -- the `Example` resource is
-  implemented for both `v1alpha1` and `v1alpha2`, each with separate typed
-  interfaces, detail views, list pages, and context menu items. The
-  v1alpha1 to v1alpha2 migration also illustrates a field rename with
-  inverted semantics (`active` to `suspended`).
+`Terminal open`은 명령을 터미널에 전달한 상태이며 Node shell 접속 성공을 검증한 상태는 아닙니다.
+Pod 목록과 RBAC 결과는 Refresh로 갱신하고 로컬 세션과 경과 시간은 자동 갱신합니다.
 
-- **Auto-detection of the available API version** -- the
-  `createAvailableVersionPage` helper tries each registered version in
-  priority order at runtime, renders the page for the first version whose
-  store is available in the cluster, and shows a friendly message if the
-  CRD is not installed.
+## Kubernetes 권한
 
-- **Static methods instead of instance methods** -- Freelens creates plain
-  object copies of Kubernetes resources rather than class instances, so all
-  per-object logic is implemented as `static` methods on the KubeObject
-  subclass (e.g. `Example.getActive(object)`).
+| API / 리소스                                    | 동작   | 용도                                    |
+| ----------------------------------------------- | ------ | --------------------------------------- |
+| `selfsubjectaccessreviews.authorization.k8s.io` | create | 실행 전 RBAC 진단                       |
+| `pods`                                          | create | 임시 Pod 생성                           |
+| `pods`                                          | get    | Ready 및 종료 상태 확인                 |
+| `pods`                                          | delete | 세션 Pod 정리                           |
+| `pods/exec`                                     | create | Node shell 접속                         |
+| `pods/attach`                                   | create | 비교 진단만 수행. 실행 조건이 아님      |
+| `pods`                                          | list   | 선택 기능: 기존 Pod 목록 및 orphan 정리 |
 
-- **Error boundary with `withErrorPage`** -- every component render is
-  wrapped in a `withErrorPage(props, fn)` helper that catches errors, logs
-  them, and renders a graceful error UI instead of crashing the panel.
+필수 권한이 거부되거나 진단 결과가 불명확하면 Pod를 만들지 않습니다.
+`pods/list`가 없어도 현재 실행한 세션은 이름으로 get/delete할 수 있습니다.
+`pods/watch`, `pods/patch`, Secret 조회 권한은 이 구현이 요구하지 않습니다.
+ServiceAccount token 자동 마운트도 사용하지 않습니다.
 
-- **Persisted preferences with MobX** -- `ExamplePreferencesStore` shows
-  how to persist extension settings across restarts using
-  `Common.Store.ExtensionStore` with MobX `@observable` fields.
+## 강제 종료와 orphan
 
-Visit the wiki page about [creating
-extensions](https://github.com/freelensapp/freelens/wiki/Creating-extensions)
-for more information.
+FreeLens를 강제 종료하면 Extension도 종료되므로 즉시 삭제를 보장할 수 없습니다.
+`activeDeadlineSeconds`는 kubelet이 실행 시간을 제한하는 장치이며,
+**일반 Pod 오브젝트를 삭제하는 TTL은 아닙니다.** Node가 응답하지 않으면 종료도 지연될 수 있습니다.
 
-## Requirements
+다음 활성화 및 주기 점검에서는 다음 조건만 자동 삭제합니다.
 
-- Kubernetes >= 1.24
-- Freelens >= 1.8.0
+- `app.kubernetes.io/name=freelens-exec-node-shell` 라벨이 일치함
+- `Succeeded` 또는 `Failed`이거나, 생성 시각 + deadline + 60초를 지남
+- 현재 창에서 관리하는 활성 세션이 아님
 
-## Supported APIs
+다른 창이나 사용자가 연 아직 만료되지 않은 세션은 자동 삭제하지 않습니다.
+현재 설정과 설정 이력에 저장된 namespace만 조회합니다.
+`pods/list` 또는 `pods/delete`가 거부되거나 클러스터에 연결할 수 없으면 orphan은 남을 수 있습니다.
+FreeLens를 다시 열지 않아도 서버에서 삭제해야 한다면 별도 서버 측 정리 구성요소가 필요합니다.
+이 Extension은 그런 구성요소를 설치하지 않습니다.
 
-### example.freelens.app
+## 빌드 및 설치
 
-<!-- markdownlint-disable MD013 -->
-
-| API Version | Kind | Scope | Description |
-| --- | --- | --- | --- |
-| v1alpha1 | `Example` | Namespaced | Example custom resource (v1alpha1) |
-| v1alpha2 | `Example` | Namespaced | Example custom resource (v1alpha2) |
-
-<!-- markdownlint-enable MD013 -->
-
-To install Custom Resource Definitions for this example run:
-
-```sh
-kubectl apply -k examples/v1alpha1/crds
-kubectl apply -k examples/v1alpha2/crds
-```
-
-Example resources for testing:
+Node.js 22 이상과 프로젝트 지정 pnpm 10을 사용합니다.
 
 ```sh
-kubectl apply -k examples/v1alpha2/test
-# or
-kubectl apply -k examples/v1alpha1/test
-```
-
-## Install
-
-To install, open Freelens and go to Extensions (`ctrl`+`shift`+`E` or
-`cmd`+`shift`+`E`), then search for and install
-`@freelensapp/example-extension`.
-
-Alternatively, open the following URL in the browser to install directly:
-
-[freelens://app/extensions/install/%40freelensapp%2Fexample-extension](freelens://app/extensions/install/%40freelensapp%2Fexample-extension)
-
-## Build from the source
-
-You can build the extension from this repository.
-
-### Prerequisites
-
-Use [NVM](https://github.com/nvm-sh/nvm),
-[mise-en-place](https://mise.jdx.dev/), or
-[windows-nvm](https://github.com/coreybutler/nvm-windows) to install the
-required Node.js version.
-
-From the root of this repository:
-
-```sh
-nvm install
-# or
-mise install
-# or
-winget install CoreyButler.NVMforWindows
-nvm install 24.15.0
-nvm use 24.15.0
-```
-
-Install pnpm:
-
-```sh
-corepack install
-# or
-curl -fsSL https://get.pnpm.io/install.sh | sh -
-# or
-winget install pnpm.pnpm
-```
-
-### Build extension
-
-```sh
-pnpm i
+corepack enable
+pnpm install --frozen-lockfile
+pnpm type:check
+pnpm test:unit
 pnpm build
 pnpm pack
 ```
 
-One script to build and pack the extension for testing:
+생성된 `.tgz`를 FreeLens Extensions 화면에 설치합니다.
+개발 버전을 올려 다시 패키징하려면 `pnpm pack:dev`를 사용합니다.
+반영되지 않으면 기존 Extension 삭제 후 FreeLens를 재실행하고 새 `.tgz`를 설치합니다.
+`.tgz`, `out/`, `node_modules/`는 Git에 저장하지 않습니다.
 
-```sh
-pnpm pack:dev
-```
+## 실제 환경 테스트
 
-### Install built extension
+회사 자격증명을 저장소나 Codespaces에 복사하지 마세요.
+FreeLens가 이미 인증된 테스트 클러스터에서 확인합니다.
 
-The tarball will be placed in the current directory. In Freelens, navigate
-to the Extensions page and provide the path to the tarball, or drag and
-drop the `.tgz` file into the Freelens window.
+| 시나리오               | 예상 결과                               |
+| ---------------------- | --------------------------------------- |
+| attach 거부, exec 허용 | Node shell 접속 가능                    |
+| shell에서 exit         | Pod 삭제, 로컬 세션 Closed              |
+| 터미널 X               | Pod 삭제                                |
+| 잘못된 image           | Ready timeout 후 Pod 삭제               |
+| 터미널 준비 실패       | 30초 후 Pod 정리                        |
+| timeout 1분            | Pod 종료 및 삭제                        |
+| 일시적 삭제 실패       | 오류 표시 후 재시도                     |
+| 강제 종료 후 재시작    | 만료된 Pod 정리, 아직 활성인 Pod 유지   |
+| pods/list 거부         | 로컬 세션 사용 가능, 목록/orphan만 실패 |
+| 설정 변경 후 재시작    | 설정 유지                               |
 
-### Check code statically
+FreeLens GUI / PowerShell 5.1 / EKS 검증은 단위 테스트와 별도로 수행해야 합니다.
 
-```sh
-pnpm lint:check
-```
+## 구조
 
-or
+- `src/main/index.ts`: main process 설정 저장소 등록
+- `src/common/store/node-shell-settings.ts`: 설정 검증 및 ExtensionStore
+- `src/renderer/index.tsx`: 메뉴/Preferences/페이지 등록, lifecycle hook
+- `src/renderer/menus/exec-node-shell-menu.tsx`: Node 메뉴
+- `src/renderer/services/node-shell-service.ts`: RBAC부터 Pod/terminal 생성까지 orchestration
+- `src/renderer/services/session-lifecycle.ts`: 종료 감지, timeout, 재시도, 중복 삭제 방지
+- `src/renderer/services/cleanup-service.ts`: 세션 관리와 orphan 정리
+- `src/renderer/services/rbac-service.ts`: SelfSubjectAccessReview
+- `src/renderer/services/orphan-policy.ts`: 자동 정리 대상 판정
+- `src/renderer/settings/preferences.tsx`: 설정 UI
+- `src/renderer/pages/sessions-page.tsx`: 세션 관리 UI
 
-```sh
-pnpm trunk:check
-```
-
-and
-
-```sh
-pnpm build
-pnpm knip:check
-```
-
-### Testing the extension with unpublished Freelens
-
-In the Freelens working repository:
-
-```sh
-rm -f *.tgz
-pnpm i
-pnpm build
-pnpm pack -r
-```
-
-Then in the extension repository:
-
-```sh
-echo "overrides:" >> pnpm-workspace.yaml
-for i in ../freelens/*.tgz; do
-  name=$(tar zxOf $i package/package.json | yq -r .name)
-  echo "  \"$name\": $i" >> pnpm-workspace.yaml
-done
-
-pnpm clean:node_modules
-pnpm build
-```
+졸업 프로젝트 설명은 [기술 설명](docs/architecture.ko.md)을 참고하세요.
 
 ## License
 
-Copyright (c) 2025-2026 Freelens Authors.
-
-[MIT License](https://opensource.org/licenses/MIT)
+MIT. 기존 FreeLens example extension의 라이선스 및 저작권 고지를 유지합니다.
 
 ## 화면 개선
 
