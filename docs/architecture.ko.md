@@ -2,7 +2,7 @@
 
 ## 주제
 
-**RBAC 제약 환경을 위한 exec 기반 Kubernetes Node Shell Extension**
+RBAC 제약 환경을 위한 exec 기반 Kubernetes Node Shell Extension
 
 기본 Node Shell의 `pods/attach` 의존성을 `pods/exec`로 대체하고,
 운영에 필요한 임시 Pod lifecycle, 권한 진단, 설정, 세션 관리 기능을 구현합니다.
