@@ -78,3 +78,16 @@ it("does not clear non-terminal output", () => {
   expect(result.status).toBe(0);
   expect(result.stdout).not.toContain("\u001b[2J");
 });
+
+it("preserves the prompt when the node uses Bash for its non-interactive sh", () => {
+  const remote = nodeShellRemoteCommand("node-bash").replace(/"/g, "");
+  const stubs = `touch() { :; }; nsenter() { while [ "$1" != -- ]; do shift; done; shift; shift; /bin/bash --posix "$@"; }; `;
+  const result = spawnSync("/bin/sh", ["-c", stubs + remote], {
+    cwd: "/",
+    input: "cd /tmp\nexit 7\n",
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  expect(result.status).toBe(7);
+  expect(result.stderr).toContain("node-bash:/tmp # ");
+});
