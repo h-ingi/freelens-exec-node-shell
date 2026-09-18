@@ -74,6 +74,9 @@ Preferences의 Save는 확장 전용 IPC로 main에 저장을 요청하고, 성�
 renderer의 이전 메모리 값이 main의 최신 설정을 덮어쓰지 않도록 renderer에서는 저장소 동기화를 시작하지 않습니다.
 `1.10.3-11`에서 별도 renderer 간 설정 전달, 저장 실패, 저장소 재로드 및 1분 제한시간을 테스트했습니다.
 실제 환경의 제한시간·재시작 검증은 별도로 수행해야 합니다.
+`1.10.3-12`에서는 설정 IPC 초기화를 main/renderer 확장 생성자로 이동했습니다.
+환경설정 사용이 `onActivate()` 호출 여부에 의존하지 않도록 하고, 활성화 콜백 없이
+등록된 설정 화면을 렌더링하여 timeout 변경·저장까지 검증하는 회귀 테스트를 추가했습니다.
 기본값은 kube-system, docker.io/library/alpine, 60분, node-shell-exec입니다.
 namespace/prefix 형식, image 공백, timeout 범위를 검증합니다.
 세션 시작 시 설정을 복사하므로 기존 세션은 원래 namespace/timeout을 유지합니다.
