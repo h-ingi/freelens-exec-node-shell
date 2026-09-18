@@ -1,5 +1,5 @@
 import { Renderer } from "@freelensapp/extensions";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { nodeShellSettings } from "../../common/store/node-shell-settings";
 import {
   cleanOrphans,
@@ -9,8 +9,11 @@ import {
   stopSession,
 } from "../services/cleanup-service";
 import { checkPermissions, execAvailable, type PermissionResult } from "../services/rbac-service";
+import sessionStyles from "./sessions-page.scss?inline";
 
 export function SessionsPage() {
+  const [search, setSearch] = useState("");
+  const request = useRef(0);
   const [now, setNow] = useState(Date.now());
   const [namespace, setNamespace] = useState(nodeShellSettings.settings.namespace);
   const [pods, setPods] = useState<Renderer.K8sApi.Pod[]>([]);
@@ -25,68 +28,119 @@ export function SessionsPage() {
   }, []);
 
   useEffect(() => {
+    request.current += 1;
+    setBusy(false);
     setPods([]);
     setPermissions([]);
     setError("");
+    return () => {
+      request.current += 1;
+    };
   }, [namespace, clusterId]);
 
   const refresh = async () => {
     if (!clusterId) return;
+    const id = ++request.current;
     setBusy(true);
     setError("");
     try {
       const result = await checkPermissions(clusterId, namespace);
-      if (Renderer.Catalog.getActiveCluster()?.id !== clusterId) return;
+      if (request.current !== id || Renderer.Catalog.getActiveCluster()?.id !== clusterId) return;
       setPermissions(result);
-      setPods(await listSessionPods(namespace));
+      const discovered = await listSessionPods(namespace);
+      if (request.current === id && Renderer.Catalog.getActiveCluster()?.id === clusterId) setPods(discovered);
     } catch (failure) {
-      setError(`Pod listing unavailable; local sessions remain visible. ${String(failure)}`);
+      if (request.current === id)
+        setError(`Pod listing unavailable; local sessions remain visible. ${String(failure)}`);
     } finally {
-      setBusy(false);
+      if (request.current === id) setBusy(false);
     }
   };
 
-  const local = [...localSessions.values()].filter((session) => session.clusterId === clusterId);
-  const remote = pods.filter((pod) => !local.some((session) => session.podName === pod.metadata.name));
+  const clusterSessions = [...localSessions.values()].filter((session) => session.clusterId === clusterId);
+  const localInNamespace = clusterSessions.filter((session) => session.namespace === namespace);
+  const remoteInNamespace = pods.filter(
+    (pod) =>
+      pod.metadata.namespace === namespace &&
+      !localInNamespace.some((session) => session.podName === pod.metadata.name),
+  );
+  const matches = (...values: (string | undefined)[]) =>
+    values.join(" ").toLowerCase().includes(search.trim().toLowerCase());
+  const local = localInNamespace
+    .filter((session) => matches(session.nodeName, session.podName, session.status))
+    .sort((a, b) => b.started - a.started);
+  const remote = remoteInNamespace.filter((pod) => matches(pod.spec.nodeName, pod.metadata.name, pod.status?.phase));
+  const total = localInNamespace.length + remoteInNamespace.length;
+  const statusTone = (status: string) => {
+    if (["Terminal open", "Running"].includes(status)) return "active";
+    if (status === "Failed") return "failed";
+    if (["Closed", "Succeeded"].includes(status)) return "closed";
+    return "pending";
+  };
   const age = (started: number) =>
     Number.isFinite(started) ? `${Math.max(0, Math.floor((now - started) / 60_000))} min` : "Unknown";
   const attach = permissions.find((permission) => permission.label === "pods/attach create");
 
   return (
-    <section style={{ padding: 24, overflow: "auto", height: "100%" }}>
-      <h1>Node Shell Sessions</h1>
-      <div style={{ display: "flex", gap: 12, alignItems: "center", margin: "16px 0" }}>
-        <label>
-          Namespace{" "}
-          <select value={namespace} onChange={(event) => setNamespace(event.target.value)}>
-            {[...new Set([...nodeShellSettings.settings.knownNamespaces, nodeShellSettings.settings.namespace])].map(
-              (value) => (
+    <section className="node-shell-sessions">
+      <style>{sessionStyles}</style>
+      <div className="sessions-toolbar">
+        <h1>Node Shell Sessions</h1>
+        <span className="sessions-count">
+          {local.length + remote.length} / {total} sessions
+        </span>
+        <div className="sessions-filters">
+          <label>
+            Namespace{" "}
+            <select
+              aria-label="Namespace"
+              disabled={busy || !clusterId}
+              value={namespace}
+              onChange={(event) => setNamespace(event.target.value)}
+            >
+              {[
+                ...new Set([
+                  ...nodeShellSettings.settings.knownNamespaces,
+                  nodeShellSettings.settings.namespace,
+                  ...clusterSessions.map((session) => session.namespace),
+                ]),
+              ].map((value) => (
                 <option key={value} value={value}>
                   {value}
                 </option>
-              ),
-            )}
-          </select>
-        </label>
+              ))}
+            </select>
+          </label>
+          <Renderer.Component.Input
+            aria-label="Search sessions"
+            placeholder="Search sessions…"
+            value={search}
+            onChange={setSearch}
+          />
+        </div>
+      </div>
+      <div className="sessions-actions">
         <Renderer.Component.Button
           label={busy ? "Checking…" : "Refresh / check permissions"}
-          disabled={busy}
+          disabled={busy || !clusterId}
           onClick={() => {
             void refresh();
           }}
         />
         <Renderer.Component.Button
           label="Clean expired pods"
-          disabled={busy}
+          disabled={busy || !clusterId}
           onClick={() => {
-            void cleanOrphans().then(refresh);
+            void cleanOrphans()
+              .then(refresh)
+              .catch((failure: unknown) => setError(String(failure)));
           }}
         />
       </div>
       {error && <p role="alert">{error}</p>}
       {permissions.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <h2>Node Shell permissions</h2>
+        <details className="sessions-permissions" open>
+          <summary>Node Shell permissions</summary>
           <table>
             <thead>
               <tr>
@@ -110,77 +164,87 @@ export function SessionsPage() {
             Default shell attach permission:{" "}
             {attach?.allowed === undefined ? "Unknown" : attach.allowed ? "Allowed" : "Not available"}
           </p>
-        </div>
+        </details>
       )}
-      <table style={{ width: "100%", textAlign: "left", borderSpacing: "12px" }}>
-        <thead>
-          <tr>
-            <th>Node / Pod</th>
-            <th>Namespace</th>
-            <th>Status</th>
-            <th>Started</th>
-            <th>Age</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {local.map((session) => (
-            <tr key={session.podName}>
-              <td>
-                {session.nodeName}
-                <br />
-                <small>{session.podName}</small>
-              </td>
-              <td>{session.namespace}</td>
-              <td>
-                {session.status}
-                {session.error && <p role="alert">{session.error}</p>}
-              </td>
-              <td>{new Date(session.started).toLocaleString()}</td>
-              <td>{age(session.started)}</td>
-              <td>
-                <Renderer.Component.Button
-                  label="Stop"
-                  disabled={["Closed", "Failed", "Stopping"].includes(session.status)}
-                  onClick={() => {
-                    void stopSession(session);
-                  }}
-                />
-              </td>
+      <div className="sessions-table-scroll">
+        <table className="sessions-table">
+          <thead>
+            <tr>
+              <th>Node</th>
+              <th>Pod</th>
+              <th>Namespace</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Age</th>
+              <th>Action</th>
             </tr>
-          ))}
-          {remote.map((pod) => (
-            <tr key={pod.metadata.uid}>
-              <td>
-                {pod.spec.nodeName}
-                <br />
-                <small>{pod.metadata.name}</small>
-              </td>
-              <td>{pod.metadata.namespace}</td>
-              <td>{pod.status?.phase ?? "Unknown"} (discovered)</td>
-              <td>{pod.metadata.creationTimestamp}</td>
-              <td>{age(Date.parse(pod.metadata.creationTimestamp ?? ""))}</td>
-              <td>
-                <Renderer.Component.Button
-                  label="Delete"
-                  onClick={() => {
-                    if (Renderer.Catalog.getActiveCluster()?.id !== clusterId) return;
-                    if (
-                      !window.confirm(`Delete ${pod.metadata.name}? This may stop a session opened in another window.`)
-                    )
-                      return;
-                    void deleteSessionPod(pod)
-                      .then(refresh)
-                      .catch((failure: unknown) => setError(String(failure)));
-                  }}
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {local.length === 0 && remote.length === 0 && <p>No sessions shown. Refresh to discover existing pods.</p>}
-      <p>
+          </thead>
+          <tbody>
+            {local.map((session) => (
+              <tr key={session.podName}>
+                <td>{session.nodeName}</td>
+                <td className="sessions-pod">{session.podName}</td>
+                <td>{session.namespace}</td>
+                <td>
+                  <span className={`session-status ${statusTone(session.status)}`}>{session.status}</span>
+                  {session.error && <p role="alert">{session.error}</p>}
+                </td>
+                <td>{new Date(session.started).toLocaleString()}</td>
+                <td>{age(session.started)}</td>
+                <td>
+                  <Renderer.Component.Button
+                    label="Stop"
+                    disabled={["Closed", "Failed", "Stopping"].includes(session.status)}
+                    onClick={() => {
+                      void stopSession(session).catch((failure: unknown) => setError(String(failure)));
+                    }}
+                  />
+                </td>
+              </tr>
+            ))}
+            {remote.map((pod) => (
+              <tr key={pod.metadata.uid}>
+                <td>{pod.spec.nodeName}</td>
+                <td className="sessions-pod">{pod.metadata.name}</td>
+                <td>{pod.metadata.namespace}</td>
+                <td>
+                  <span className={`session-status ${statusTone(pod.status?.phase ?? "Unknown")}`}>
+                    {pod.status?.phase ?? "Unknown"}
+                  </span>
+                  <small className="sessions-discovered">Discovered</small>
+                </td>
+                <td>{pod.metadata.creationTimestamp}</td>
+                <td>{age(Date.parse(pod.metadata.creationTimestamp ?? ""))}</td>
+                <td>
+                  <Renderer.Component.Button
+                    label="Delete"
+                    onClick={() => {
+                      if (Renderer.Catalog.getActiveCluster()?.id !== clusterId) return;
+                      if (
+                        !window.confirm(
+                          `Delete ${pod.metadata.name}? This may stop a session opened in another window.`,
+                        )
+                      )
+                        return;
+                      void deleteSessionPod(pod)
+                        .then(refresh)
+                        .catch((failure: unknown) => setError(String(failure)));
+                    }}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {local.length === 0 && remote.length === 0 && (
+        <p className="sessions-empty">
+          {search.trim()
+            ? "No matching sessions."
+            : "No sessions in this namespace. Refresh to discover existing pods."}
+        </p>
+      )}
+      <p className="sessions-hint">
         Live sessions from other windows are never automatically deleted before their deadline. Discovery needs
         pods/list.
       </p>
