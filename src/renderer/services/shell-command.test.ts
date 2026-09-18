@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { hostShellCommand, nodeShellRemoteCommand } from "./shell-command";
+import { hostShellCommand, hostStartup, nodeShellRemoteCommand } from "./shell-command";
 
 describe("node shell prompt", () => {
   it("shows the node and updates the path after cd in the host shell", () => {
@@ -48,4 +48,33 @@ it("keeps the shell open through legacy native argument quote removal", () => {
   expect(result.status).toBe(7);
   expect(result.stdout).toBe("MARKER:/tmp/exec-started\nSESSION_ALIVE\nMARKER:/tmp/exec-ended\n");
   expect(result.stderr).toContain("node-01:/tmp # ");
+});
+
+it("clears an attached terminal and then starts the interactive shell", () => {
+  const python = String.raw`import os, pty, subprocess, sys
+master, slave = pty.openpty()
+p = subprocess.Popen(['/bin/sh', '-c', sys.argv[1]], stdin=subprocess.PIPE, stdout=slave, stderr=slave)
+os.close(slave)
+p.communicate(b"printf 'READY\\n'\nexit\n", timeout=3)
+output = b''
+while True:
+    try:
+        chunk = os.read(master, 4096)
+        if not chunk: break
+        output += chunk
+    except OSError: break
+os.close(master)
+sys.stdout.buffer.write(output)
+sys.exit(p.returncode)
+`;
+  const result = spawnSync("python3", ["-c", python, hostStartup], { encoding: "utf8", timeout: 5000 });
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("\u001b[2J\u001b[H");
+  expect(result.stdout).toContain("READY");
+});
+
+it("does not clear non-terminal output", () => {
+  const result = spawnSync("/bin/sh", ["-c", hostStartup], { input: "exit\n", encoding: "utf8", timeout: 5000 });
+  expect(result.status).toBe(0);
+  expect(result.stdout).not.toContain("\u001b[2J");
 });
