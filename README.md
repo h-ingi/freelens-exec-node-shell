@@ -6,7 +6,8 @@ Node 우클릭 메뉴에서 **Exec Node Shell**을 선택합니다.
 대상 환경: **FreeLens 1.10.2 / Windows PowerShell 5.1 / Linux Kubernetes Node**.
 개발 의존성 `@freelensapp/extensions`는 1.10.2에 고정했습니다.
 현재 터미널 명령 생성기는 PowerShell용이며 bash/zsh 로컬 터미널은 지원하지 않습니다.
-Node 내부 shell은 `/bin/sh`입니다.
+Node 내부 shell은 `/bin/sh`이며 프롬프트는 `노드명:/현재/경로 #` 형식입니다.
+`cd`하면 표시 경로도 바뀌며, Node의 profile 파일은 수정하지 않습니다.
 
 ## 동작
 
@@ -27,11 +28,12 @@ Extension은 해당 정책을 변경하지 않습니다.
 
 - 정상 `exit`: 원격 종료 표식으로 keep-alive를 종료하고 터미널 finally와 API 감시가 삭제합니다.
 - 터미널 X: terminal store에서 연결이 제거되면 API로 삭제합니다.
-- 실패 및 timeout: Pod Ready 120초, terminal ready 30초, 세션 기본 60분입니다.
+- 실패 및 timeout: Pod Ready 120초, terminal ready 30초, 세션 기본 60분입니다. 활동 여부와 관계없이 세션 시작부터 계산하는 최대 수명이며, 유휴 시간 제한이 아닙니다.
 - exec가 실제로 시작되지 않으면 컨테이너는 180초 후 종료하여 API 정리 대상으로 전환됩니다.
 - 삭제 실패: 실행 중 2초 간격으로 재시도합니다. 404는 이미 삭제된 것으로 처리합니다.
 - Preferences: namespace, image, timeout, Pod prefix를 저장합니다. main의 저장 응답을 확인한 뒤 완료 문구를 표시하며, 새 세션은 main에서 최신 설정을 읽어 적용합니다.
-- **Node Shell Sessions**: Node/Pod, namespace, 상태, 시작 시각, 경과 시간, Stop을 표시합니다.
+- **Node Shell Sessions**: Services 목록처럼 상단에 세션 수·namespace 필터·검색을 표시합니다. Node, Pod, namespace, 상태, 시작 시각, 경과 시간, Stop을 열로 구분하고 상태는 색상과 텍스트로 표시합니다.
+- 검색은 Node명·Pod명·상태를 대상으로 하며 선택한 namespace의 세션만 표시합니다.
 - **Refresh / check permissions**: RBAC 표와 기존 Pod를 조회합니다. 발견한 Pod는 확인 후 Delete할 수 있습니다.
 - 시작 시 및 60초마다 종료/만료된 orphan Pod를 점검합니다.
 
@@ -139,15 +141,37 @@ FreeLens GUI / PowerShell 5.1 / EKS 검증은 단위 테스트와 별도로 수�
 - `src/renderer/pages/sessions-page.tsx`: 세션 관리 UI
 
 졸업 프로젝트 설명은 [기술 설명](docs/architecture.ko.md)을 참고하세요.
+기능별 브랜치, PR 검토 및 병합 순서는 [브랜치 운영 안내](docs/branches.ko.md)를 참고하세요.
 
 ## License
 
 MIT. 기존 FreeLens example extension의 라이선스 및 저작권 고지를 유지합니다.
 
-## 화면 개선
+## 1.10.3-15 화면 개선
 
 확장 이름과 설정 제목은 `freelens-exec-node-shell`입니다. 설정 화면은 FreeLens 기본 Input을 사용합니다.
-기본 제한시간은 60분이며 활동 여부와 관계없이 시작부터 계산합니다. 기존 저장값은 유지합니다.
-셸 프롬프트는 `노드명:/현재/경로 #`이며 `cd`하면 경로가 바뀝니다.
-이전 scoped 확장은 비활성화하고 새 확장만 활성화하세요. 설정 저장 경로는 이전과 동일하게 유지합니다.
-세션 목록은 Node·Pod 열, namespace 필터, Node명·Pod명·상태 검색, 세션 수 및 색상별 상태를 제공합니다.
+기본 timeout은 60분을 유지하며 기존 저장값은 덮어쓰지 않습니다. 검증용으로 1분을 저장했다면 직접 60분으로 바꿔 Save하세요.
+이전 `@h-ingi/freelens-exec-node-shell`에서 이동하는 절차는 [업데이트 안내](docs/releases.ko.md)를 참고하세요.
+
+기존 기능 검증은 사용자 환경에서 완료되었다는 피드백을 받았습니다.
+이번 화면·이름·프롬프트 변경은 새 패키지 설치 후 표시, 검색, 설정 유지 및 셸 종료를 다시 확인해야 합니다.
+
+## 1.10.3-16 셸 접속 수정
+
+1.10.3-15 프롬프트 명령의 중첩 따옴표를 제거했습니다. PowerShell 5.1에서 외부 명령으로 전달할 때
+따옴표가 손실되면 셸이 곧바로 끝나고 finally에서 Pod를 삭제할 수 있었습니다.
+프롬프트는 환경변수로 전달하며 기존 nsenter → /bin/sh 접속 구조를 유지합니다.
+UI와 설정은 그대로 유지됩니다. Windows에서 새 세션의 접속 유지와 exit 정리를 재확인하세요.
+
+## 1.10.3-17 세션 화면과 접속 화면
+
+- `Clear closed sessions`: 현재 클러스터·선택한 namespace의 Closed 기록만 삭제합니다. 검색어와 관계없이 해당 namespace의 종료 기록이 대상이며 실제 Pod나 활성 세션은 건드리지 않습니다.
+- `Clean leftover pods`: 기존 Clean expired pods와 동일한 정리 기능입니다. 종료되었거나 제한시간과 유예시간을 넘긴 잔여 Pod를 정리합니다.
+- 권한 진단은 RBAC 실행 가능 여부를 먼저 표시합니다. 권한별 필수/선택 구분과 긴 사유는 펼쳐서 확인합니다. attach 거부는 실행 차단 사유가 아닙니다.
+- nsenter로 Node에 진입한 뒤 대화형 셸 시작 직전에 터미널 표시 화면을 지웁니다. 스크롤백은 유지하며 접속 실패 전에는 화면을 지우지 않습니다.
+
+## 1.10.3-18 Bash 기반 Node 프롬프트 수정
+
+비대화형 Bash가 상속된 PS1을 초기화하는 경우를 처리했습니다. 프롬프트를 별도 환경변수로 전달하고
+Node 내부 셸에서 PS1을 복원한 뒤 화면을 지우고 대화형 셸을 시작합니다.
+노드명과 현재 경로 표시, 화면 지우기, PowerShell 5.1 호환 및 기존 정리 동작을 유지합니다.
