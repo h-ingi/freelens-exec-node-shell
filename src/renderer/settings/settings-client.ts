@@ -6,7 +6,7 @@ class SettingsRendererIpc extends Renderer.Ipc {}
 let ipc: SettingsRendererIpc | undefined;
 
 export function initializeSettingsClient(extension: Renderer.LensExtension): void {
-  ipc = new SettingsRendererIpc(extension);
+  ipc = SettingsRendererIpc.createInstance(extension);
 }
 
 async function requestSettings(channel: string, settings?: NodeShellSettings): Promise<NodeShellSettings> {

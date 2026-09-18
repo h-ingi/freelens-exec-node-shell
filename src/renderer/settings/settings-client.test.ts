@@ -11,6 +11,26 @@ const host = vi.hoisted(() => ({
 
 vi.mock("@freelensapp/extensions", async () => {
   const { reaction, runInAction } = await import("mobx");
+  // FreeLens v1.10.3 common/utils/singleton.ts rejects direct construction.
+  // Both host IPC classes inherit this contract.
+  class HostSingleton {
+    private static creating = false;
+    private static instances = new WeakMap<object, HostSingleton>();
+    constructor() {
+      if (!HostSingleton.creating) throw new TypeError("A singleton class must be created by createInstance()");
+    }
+    static createInstance<T extends HostSingleton, A extends unknown[]>(this: new (...args: A) => T, ...args: A): T {
+      if (!HostSingleton.instances.has(this)) {
+        HostSingleton.creating = true;
+        try {
+          HostSingleton.instances.set(this, new this(...args));
+        } finally {
+          HostSingleton.creating = false;
+        }
+      }
+      return HostSingleton.instances.get(this) as T;
+    }
+  }
   return {
     Common: {
       Store: {
@@ -39,7 +59,7 @@ vi.mock("@freelensapp/extensions", async () => {
     },
     Main: {
       LensExtension: class {},
-      Ipc: class {
+      Ipc: class extends HostSingleton {
         handle(channel: string, handler: (...args: unknown[]) => unknown) {
           host.handlers.set(channel, handler);
         }
@@ -49,7 +69,7 @@ vi.mock("@freelensapp/extensions", async () => {
       LensExtension: class {},
       K8sApi: { KubeObject: class {} },
       Component: { Button: ({ label, ...props }: { label: string }) => createElement("button", props, label) },
-      Ipc: class {
+      Ipc: class extends HostSingleton {
         async invoke(channel: string, ...args: unknown[]) {
           const handler = host.handlers.get(channel);
           if (!handler) throw new Error("No settings handler");
