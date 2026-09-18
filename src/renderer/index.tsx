@@ -2,6 +2,7 @@ import { Renderer } from "@freelensapp/extensions";
 import { validateSettings } from "../common/store/node-shell-settings";
 import { checkPermissions, execAvailable, permissionSummary } from "./services/rbac-service";
 import { isNotFound, quotePowerShell, SessionLifecycle } from "./services/session-lifecycle";
+import { nodeShellRemoteCommand } from "./services/shell-command";
 import { NodeShellPreferenceHint, NodeShellPreferences } from "./settings/preferences";
 import { initializeSettingsClient, loadSettings } from "./settings/settings-client";
 
@@ -179,7 +180,7 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
       stage = "sending exec command";
       const q = quotePowerShell;
       const target = `--context ${q(cluster.contextName)} -n ${q(NAMESPACE)}`;
-      const remote = 'nsenter -t 1 -m -u -i -n -p -- /bin/sh; result=$?; touch /tmp/exec-ended; exit "$result"';
+      const remote = nodeShellRemoteCommand(nodeName);
       const command =
         `Write-Host ${q(`=== Node Shell: ${nodeName} ===`)}; ` +
         `try { kubectl exec -it ${target} ${q(podName)} -c shell -- sh -c ${q(remote)} } ` +
@@ -236,7 +237,7 @@ export default class ExecNodeShellRenderer extends Renderer.LensExtension {
   }
   appPreferences = [
     {
-      title: "Exec Node Shell Settings",
+      title: "freelens-exec-node-shell",
       components: { Input: NodeShellPreferences, Hint: NodeShellPreferenceHint },
     },
   ];

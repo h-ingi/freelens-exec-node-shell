@@ -2,7 +2,7 @@
 import { deserialize, serialize } from "node:v8";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { observable } from "mobx";
-import { createElement } from "react";
+import { createElement, type InputHTMLAttributes } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const host = vi.hoisted(() => ({
@@ -70,7 +70,14 @@ vi.mock("@freelensapp/extensions", async () => {
     Renderer: {
       LensExtension: class {},
       K8sApi: { KubeObject: class {} },
-      Component: { Button: ({ label, ...props }: { label: string }) => createElement("button", props, label) },
+      Component: {
+        Button: ({ label, ...props }: { label: string }) => createElement("button", props, label),
+        Input: ({
+          onChange,
+          ...props
+        }: Omit<InputHTMLAttributes<HTMLInputElement>, "onChange"> & { onChange: (value: string) => void }) =>
+          createElement("input", { ...props, onChange: (event) => onChange(event.currentTarget.value) }),
+      },
       Ipc: class extends HostSingleton {
         async invoke(channel: string, ...args: unknown[]) {
           const handler = host.handlers.get(channel);
