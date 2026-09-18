@@ -162,3 +162,10 @@ MIT. 기존 FreeLens example extension의 라이선스 및 저작권 고지를 �
 따옴표가 손실되면 셸이 곧바로 끝나고 finally에서 Pod를 삭제할 수 있었습니다.
 프롬프트는 환경변수로 전달하며 기존 nsenter → /bin/sh 접속 구조를 유지합니다.
 UI와 설정은 그대로 유지됩니다. Windows에서 새 세션의 접속 유지와 exit 정리를 재확인하세요.
+
+## 1.10.3-17 세션 화면과 접속 화면
+
+- `Clear closed sessions`: 현재 클러스터·선택한 namespace의 Closed 기록만 삭제합니다. 검색어와 관계없이 해당 namespace의 종료 기록이 대상이며 실제 Pod나 활성 세션은 건드리지 않습니다.
+- `Clean leftover pods`: 기존 Clean expired pods와 동일한 정리 기능입니다. 종료되었거나 제한시간과 유예시간을 넘긴 잔여 Pod를 정리합니다.
+- 권한 진단은 RBAC 실행 가능 여부를 먼저 표시합니다. 권한별 필수/선택 구분과 긴 사유는 펼쳐서 확인합니다. attach 거부는 실행 차단 사유가 아닙니다.
+- nsenter로 Node에 진입한 뒤 대화형 셸 시작 직전에 터미널 표시 화면을 지웁니다. 스크롤백은 유지하며 접속 실패 전에는 화면을 지우지 않습니다.

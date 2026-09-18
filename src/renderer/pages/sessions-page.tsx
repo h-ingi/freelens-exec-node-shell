@@ -79,7 +79,7 @@ export function SessionsPage() {
   };
   const age = (started: number) =>
     Number.isFinite(started) ? `${Math.max(0, Math.floor((now - started) / 60_000))} min` : "Unknown";
-  const attach = permissions.find((permission) => permission.label === "pods/attach create");
+  const closed = localInNamespace.filter((session) => session.status === "Closed");
 
   return (
     <section className="node-shell-sessions">
@@ -128,7 +128,7 @@ export function SessionsPage() {
           }}
         />
         <Renderer.Component.Button
-          label="Clean expired pods"
+          label="Clean leftover pods"
           disabled={busy || !clusterId}
           onClick={() => {
             void cleanOrphans()
@@ -136,35 +136,78 @@ export function SessionsPage() {
               .catch((failure: unknown) => setError(String(failure)));
           }}
         />
+        <Renderer.Component.Button
+          label={`Clear closed sessions (${closed.length})`}
+          disabled={closed.length === 0 || !clusterId}
+          onClick={() => {
+            if (Renderer.Catalog.getActiveCluster()?.id !== clusterId) return;
+            for (const session of closed) {
+              if (session.status === "Closed") localSessions.delete(session.podName);
+            }
+            setNow(Date.now());
+          }}
+        />
+        <small>
+          Clear closed sessions removes local history in this namespace. Clean leftover pods deletes finished or expired
+          session Pods.
+        </small>
       </div>
       {error && <p role="alert">{error}</p>}
       {permissions.length > 0 && (
-        <details className="sessions-permissions" open>
-          <summary>Node Shell permissions</summary>
-          <table>
-            <thead>
-              <tr>
-                <th>Permission</th>
-                <th>Result</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              {permissions.map((permission) => (
-                <tr key={permission.label}>
-                  <td>{permission.label}</td>
-                  <td>{permission.allowed === undefined ? "Unknown" : permission.allowed ? "Allowed" : "Denied"}</td>
-                  <td>{permission.reason}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p>Exec Node Shell: {execAvailable(permissions) ? "Available (RBAC)" : "Denied or unknown"}</p>
-          <p>
-            Default shell attach permission:{" "}
-            {attach?.allowed === undefined ? "Unknown" : attach.allowed ? "Allowed" : "Not available"}
+        <div className="sessions-permissions">
+          <p className={`permission-summary ${execAvailable(permissions) ? "allowed" : "denied"}`}>
+            {execAvailable(permissions)
+              ? "Node shell: Ready (RBAC)"
+              : "Node shell: Required permissions denied or unknown"}
           </p>
-        </details>
+          <p>Attach is not used. Pod listing is optional and enables leftover Pod discovery.</p>
+          <details>
+            <summary>Permission details ({permissions.length})</summary>
+            <div className="sessions-table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Permission</th>
+                    <th>Purpose</th>
+                    <th>Result</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {permissions.map((permission) => (
+                    <tr key={permission.label}>
+                      <td>{permission.label}</td>
+                      <td>
+                        {permission.required
+                          ? "Required for node shell"
+                          : permission.label === "pods/attach create"
+                            ? "Not used (reference only)"
+                            : "Optional: leftover Pod discovery"}
+                      </td>
+                      <td>
+                        <span
+                          className={`permission-result ${permission.allowed === true ? "allowed" : permission.required ? "denied" : "optional"}`}
+                        >
+                          {permission.allowed === undefined ? "Unknown" : permission.allowed ? "Allowed" : "Denied"}
+                        </span>
+                      </td>
+                      <td>
+                        {permission.reason ? (
+                          <details>
+                            <summary>Show reason</summary>
+                            <p className="permission-reason">{permission.reason}</p>
+                          </details>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </div>
       )}
       <div className="sessions-table-scroll">
         <table className="sessions-table">

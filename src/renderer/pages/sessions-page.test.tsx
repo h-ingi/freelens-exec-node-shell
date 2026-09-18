@@ -90,3 +90,30 @@ it("keeps local sessions visible when discovery fails", async () => {
   await waitFor(() => expect(ui.getByRole("alert").textContent).toContain("list denied"));
   expect(ui.getByText("pod-active")).toBeTruthy();
 });
+
+it("clears only closed local history in the selected namespace without stopping sessions", () => {
+  const source = mocks.sessions.get("pod-closed")!;
+  mocks.sessions.set("closed-other-ns", { ...source, podName: "closed-other-ns", namespace: "debug" });
+  mocks.sessions.set("closed-other-cluster", { ...source, podName: "closed-other-cluster", clusterId: "cluster-b" });
+  mocks.sessions.set("failed", { ...source, podName: "failed", status: "Failed" });
+  const ui = render(<SessionsPage />);
+  fireEvent.click(ui.getByRole("button", { name: "Clear closed sessions (1)" }));
+  expect(mocks.sessions.has("pod-closed")).toBe(false);
+  for (const name of ["pod-active", "closed-other-ns", "closed-other-cluster", "failed"])
+    expect(mocks.sessions.has(name)).toBe(true);
+  expect(mocks.stop).not.toHaveBeenCalled();
+  expect(mocks.clean).not.toHaveBeenCalled();
+  expect((ui.getByRole("button", { name: "Clear closed sessions (0)" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("separates optional attach denial from the node shell readiness summary", async () => {
+  mocks.permissions.mockResolvedValue([
+    { label: "pods/create", required: true, allowed: true, reason: "RBAC binding details" },
+    { label: "pods/attach create", required: false, allowed: false, reason: "" },
+  ]);
+  const ui = render(<SessionsPage />);
+  fireEvent.click(ui.getByRole("button", { name: "Refresh / check permissions" }));
+  await waitFor(() => expect(ui.getByText("Node shell: Ready (RBAC)")).toBeTruthy());
+  expect(ui.getByText("Not used (reference only)")).toBeTruthy();
+  expect(ui.getByText("RBAC binding details").closest("details")?.open).toBe(false);
+});
