@@ -1,27 +1,37 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema-jsonc.json",
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
 
   "entry": [
-    "out/{main,preload}/index.js!",
+    "out/{main,renderer}/index.js!",
     "src/main/index.ts",
+    "electron.vite.config.js",
+    "vitest.config.ts",
     "src/renderer/index.tsx",
     "src/**/*.{test,spec}.{ts,tsx}",
     "test/**/*.{ts,tsx}"
   ],
   "project": ["*.{js,mjs,ts}", "out/**/*.js!", "src/**/*.{ts,tsx}"],
 
-  "ignoreBinaries": ["electron-rebuild", "yq"],
+  "ignoreBinaries": ["electron-rebuild", "python3"],
   "ignoreDependencies": [
-    // used as vite plugin
-    "@babel/plugin-proposal-decorators"
+    // Babel loads this plugin by its string name in electron.vite.config.js.
+    "@babel/plugin-proposal-decorators",
+    // Resolve these through the installed extension SDK to test the exact host parser version.
+    "@freelensapp/kube-api",
+    "@freelensapp/kube-object",
+    // Still imported by the retained, type-checked example views; supplied by the FreeLens host.
+    "mobx-react"
   ],
 
   "typescript": {
     "config": ["tsconfig.json"]
   },
   "vite": {
-    "config": ["electron.vite.config.js"]
+    // Analyze config imports via entry files; Vite itself validates execution during the build.
+    "config": []
   },
+
+  "vitest": { "config": [] },
 
   "exclude": ["exports"]
 }
