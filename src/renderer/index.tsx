@@ -20,7 +20,7 @@ export default class ExecNodeShellRenderer extends Renderer.LensExtension {
   }
   appPreferences = [
     {
-      title: "Exec Node Shell Settings",
+      title: "freelens-exec-node-shell",
       components: { Input: NodeShellPreferences, Hint: NodeShellPreferenceHint },
     },
   ];

@@ -7,7 +7,7 @@ FreeLens와 클러스터 인증, kubectl 및 README의 Kubernetes 권한은 필�
 사용자 PC에서 Node.js/pnpm 설치나 소스 빌드는 필요하지 않습니다.
 
 1. [Releases](https://github.com/h-ingi/freelens-exec-node-shell/releases)를 엽니다.
-2. 원하는 버전의 Assets에서 `h-ingi-freelens-exec-node-shell-<버전>.tgz`를 받습니다.
+2. 원하는 버전의 Assets에서 `freelens-exec-node-shell-<버전>.tgz`를 받습니다.
 3. FreeLens **Extensions** 화면에 `.tgz`를 드래그하거나 파일의 로컬 경로를 입력하여 설치합니다.
 4. 활성화를 확인하고 Node 우클릭 메뉴의 **Exec Node Shell**을 실행합니다.
 
@@ -21,12 +21,26 @@ FreeLens와 클러스터 인증, kubectl 및 README의 Kubernetes 권한은 필�
 같은 Assets에서 `.tgz.sha256`도 다운로드합니다. PowerShell에서 파일 이름을 실제 버전으로 바꾸어 실행합니다.
 
 ```powershell
-Get-FileHash .\h-ingi-freelens-exec-node-shell-1.10.3-7.tgz -Algorithm SHA256
-Get-Content .\h-ingi-freelens-exec-node-shell-1.10.3-7.tgz.sha256
+Get-FileHash .\freelens-exec-node-shell-1.10.3-7.tgz -Algorithm SHA256
+Get-Content .\freelens-exec-node-shell-1.10.3-7.tgz.sha256
 ```
 
 두 SHA-256 값이 대소문자 차이를 제외하고 일치해야 합니다.
 `sbom.spdx.json`은 구성요소 목록이며 설치할 파일은 아닙니다.
+
+### 1.10.3-15 이름 변경 시 설치
+
+확장 이름이 `@h-ingi/freelens-exec-node-shell`에서 `freelens-exec-node-shell`로 바뀝니다.
+기존 설정을 읽기 위해 manifest의 `storeName`은 이전 이름으로 유지합니다.
+
+1. 사용 중인 Node Shell 세션을 종료하고 현재 설정값을 기록합니다.
+2. Extensions에서 기존 `@h-ingi/freelens-exec-node-shell`을 비활성화합니다.
+3. 새 `freelens-exec-node-shell-1.10.3-15.tgz`를 설치하고 FreeLens를 재시작합니다.
+4. 새 확장만 활성화되어 있는지, 설정값이 유지되는지 확인합니다. 두 확장을 동시에 활성화하지 마세요.
+5. 새 확장의 작동을 확인한 후 필요하면 이전 확장을 제거합니다.
+
+기본 제한시간은 60분이지만 기존에 저장한 1분 설정은 그대로 유지됩니다.
+평소 사용할 값으로 변경하고 Save한 후 새 세션에 적용하세요.
 
 ### 업데이트와 이전 버전 복구
 
@@ -49,7 +63,8 @@ Artifact 보관 기간은 30일입니다. 만료되면 워크플로를 다시 �
 
 ## 관리자: 버전 배포
 
-현재 작업 PR을 검토·병합한 뒤 실제 Windows FreeLens 환경의 README 테스트 항목을 확인합니다.
+[브랜치 운영 안내](branches.ko.md)의 순서대로 단계별 PR을 최종 #1까지 검토·병합한 뒤,
+실제 Windows FreeLens 환경의 README 테스트 항목을 확인합니다.
 자동 단위 테스트 통과만으로 GUI/EKS 동작 검증이 끝나는 것은 아닙니다.
 
 1. 배포할 커밋에 `package.json` 버전을 확정하고 변경을 main에 반영합니다.

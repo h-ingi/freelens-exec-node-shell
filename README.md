@@ -78,7 +78,7 @@ FreeLens를 다시 열지 않아도 서버에서 삭제해야 한다면 별도 �
 일반 사용자는 Node.js나 pnpm을 설치하거나 직접 빌드할 필요가 없습니다.
 
 1. [GitHub Releases](https://github.com/h-ingi/freelens-exec-node-shell/releases)에서 사용할 버전을 엽니다. 시험 버전은 **Pre-release**로 표시됩니다.
-2. **Assets**에서 `h-ingi-freelens-exec-node-shell-<버전>.tgz`를 다운로드합니다.
+2. **Assets**에서 `freelens-exec-node-shell-<버전>.tgz`를 다운로드합니다.
 3. FreeLens의 **Extensions** 화면에서 파일을 드래그하거나 로컬 파일 경로로 설치합니다. `.tgz`는 풀지 않습니다.
 4. Extension 활성화를 확인한 뒤 Node 우클릭 → **Exec Node Shell**을 선택합니다.
 
@@ -143,3 +143,11 @@ FreeLens GUI / PowerShell 5.1 / EKS 검증은 단위 테스트와 별도로 수�
 ## License
 
 MIT. 기존 FreeLens example extension의 라이선스 및 저작권 고지를 유지합니다.
+
+## 화면 개선
+
+확장 이름과 설정 제목은 `freelens-exec-node-shell`입니다. 설정 화면은 FreeLens 기본 Input을 사용합니다.
+기본 제한시간은 60분이며 활동 여부와 관계없이 시작부터 계산합니다. 기존 저장값은 유지합니다.
+셸 프롬프트는 `노드명:/현재/경로 #`이며 `cd`하면 경로가 바뀝니다.
+이전 scoped 확장은 비활성화하고 새 확장만 활성화하세요. 설정 저장 경로는 이전과 동일하게 유지합니다.
+세션 목록은 Node·Pod 열, namespace 필터, Node명·Pod명·상태 검색, 세션 수 및 색상별 상태를 제공합니다.
