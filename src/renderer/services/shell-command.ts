@@ -7,12 +7,13 @@ function shellEnvironment(nodeName: string): string {
   const displayName = nodeName.replace(/[^a-zA-Z0-9.-]/g, "_");
   const prompt = `${displayName}:\${PWD} # `;
   // Scope prompt and startup overrides to this shell; never edit host profile files.
-  return `PS1=${quoteShell(prompt)}; export PS1; ENV=/dev/null; export ENV`;
+  return `NODE_SHELL_PROMPT=${quoteShell(prompt)}; export NODE_SHELL_PROMPT; PS1=$NODE_SHELL_PROMPT; export PS1; ENV=/dev/null; export ENV`;
 }
 
 // This script deliberately contains no quotes: it crosses the legacy Windows
 // native argument boundary inside one single-quoted POSIX argument.
-export const hostStartup = String.raw`if [ -t 1 ]; then printf \\033\\1332J\\033\\133H; fi; exec /bin/sh -i`;
+// Non-interactive Bash resets inherited PS1. Restore it inside the host shell.
+export const hostStartup = String.raw`PS1=$NODE_SHELL_PROMPT; export PS1; unset NODE_SHELL_PROMPT; if [ -t 1 ]; then printf \\033\\1332J\\033\\133H; fi; exec /bin/sh -i`;
 
 export function hostShellCommand(nodeName: string): string {
   return `${shellEnvironment(nodeName)}; exec /bin/sh -i`;
