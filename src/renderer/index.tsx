@@ -6,8 +6,12 @@ import { NodeShellPreferenceHint, NodeShellPreferences } from "./settings/prefer
 import { initializeSettingsClient, loadSettings } from "./settings/settings-client";
 
 export default class ExecNodeShellRenderer extends Renderer.LensExtension {
-  async onActivate() {
+  constructor(extension: ConstructorParameters<typeof Renderer.LensExtension>[0]) {
+    super(extension);
+    // Preferences registration can be used before the activation callback.
     initializeSettingsClient(this);
+  }
+  async onActivate() {
     await loadSettings();
     startCleanup();
   }
