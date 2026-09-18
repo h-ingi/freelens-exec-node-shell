@@ -10,6 +10,10 @@ function shellEnvironment(nodeName: string): string {
   return `PS1=${quoteShell(prompt)}; export PS1; ENV=/dev/null; export ENV`;
 }
 
+// This script deliberately contains no quotes: it crosses the legacy Windows
+// native argument boundary inside one single-quoted POSIX argument.
+export const hostStartup = String.raw`if [ -t 1 ]; then printf \\033\\1332J\\033\\133H; fi; exec /bin/sh -i`;
+
 export function hostShellCommand(nodeName: string): string {
   return `${shellEnvironment(nodeName)}; exec /bin/sh -i`;
 }
@@ -17,7 +21,7 @@ export function hostShellCommand(nodeName: string): string {
 export function nodeShellRemoteCommand(nodeName: string): string {
   return (
     // Avoid nested shell quoting: Windows PowerShell 5.1 can strip embedded double quotes.
-    `touch /tmp/exec-started; ${shellEnvironment(nodeName)}; nsenter -t 1 -m -u -i -n -p -- /bin/sh -i; ` +
+    `touch /tmp/exec-started; ${shellEnvironment(nodeName)}; nsenter -t 1 -m -u -i -n -p -- /bin/sh -c ${quoteShell(hostStartup)}; ` +
     'result=$?; touch /tmp/exec-ended; exit "$result"'
   );
 }
