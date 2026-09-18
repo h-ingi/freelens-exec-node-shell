@@ -77,6 +77,10 @@ renderer의 이전 메모리 값이 main의 최신 설정을 덮어쓰지 않도
 `1.10.3-12`에서는 설정 IPC 초기화를 main/renderer 확장 생성자로 이동했습니다.
 환경설정 사용이 `onActivate()` 호출 여부에 의존하지 않도록 하고, 활성화 콜백 없이
 등록된 설정 화면을 렌더링하여 timeout 변경·저장까지 검증하는 회귀 테스트를 추가했습니다.
+`1.10.3-13`에서는 main/renderer IPC를 `createInstance()`로 생성하도록 수정했습니다.
+FreeLens IPC의 Singleton 부모 클래스는 직접 `new`로 생성하면 예외를 던집니다.
+생성자로 초기화를 이동한 것만으로는 이 제약을 해결하지 못했습니다. 테스트에도 직접 생성 금지
+계약을 반영하여 확장 생성·설정 화면 편집·저장 경로를 검증합니다.
 기본값은 kube-system, docker.io/library/alpine, 60분, node-shell-exec입니다.
 namespace/prefix 형식, image 공백, timeout 범위를 검증합니다.
 세션 시작 시 설정을 복사하므로 기존 세션은 원래 namespace/timeout을 유지합니다.
