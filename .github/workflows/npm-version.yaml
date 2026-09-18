@@ -7,9 +7,6 @@ on:
         description: New version (X.Y.Z | major | minor | patch | premajor | preminor | prepatch | prerelease)
         required: true
         default: prerelease
-  release:
-    types:
-      - released
 
 permissions:
   contents: write

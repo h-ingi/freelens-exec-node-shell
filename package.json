@@ -1,6 +1,6 @@
 {
   "name": "freelens-exec-node-shell",
-  "version": "1.10.3-7",
+  "version": "1.10.3-18",
   "description": "FreeLens Node Shell using pods/exec instead of pods/attach",
   "repository": {
     "type": "git",
@@ -10,7 +10,8 @@
   "main": "out/main/index.js",
   "renderer": "out/renderer/index.js",
   "files": [
-    "out/**/*"
+    "out/**/*",
+    "docs/**/*.md"
   ],
   "engines": {
     "node": ">= 22.0.0",

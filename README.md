@@ -73,7 +73,20 @@ FreeLens를 강제 종료하면 Extension도 종료되므로 즉시 삭제를 �
 FreeLens를 다시 열지 않아도 서버에서 삭제해야 한다면 별도 서버 측 정리 구성요소가 필요합니다.
 이 Extension은 그런 구성요소를 설치하지 않습니다.
 
-## 빌드 및 설치
+## 다운로드하여 설치
+
+일반 사용자는 Node.js나 pnpm을 설치하거나 직접 빌드할 필요가 없습니다.
+
+1. [GitHub Releases](https://github.com/h-ingi/freelens-exec-node-shell/releases)에서 사용할 버전을 엽니다. 시험 버전은 **Pre-release**로 표시됩니다.
+2. **Assets**에서 `freelens-exec-node-shell-<버전>.tgz`를 다운로드합니다.
+3. FreeLens의 **Extensions** 화면에서 파일을 드래그하거나 로컬 파일 경로로 설치합니다. `.tgz`는 풀지 않습니다.
+4. Extension 활성화를 확인한 뒤 Node 우클릭 → **Exec Node Shell**을 선택합니다.
+
+GitHub의 `Source code (zip)` / `Source code (tar.gz)`는 설치 패키지가 아닙니다.
+릴리스가 아직 없으면 Actions의 성공한 **Release packages** 실행에서 시험용 패키지를 받을 수 있습니다.
+파일 검증, 업데이트, 시험 패키지 다운로드 및 관리자 배포 절차는 [배포 안내](docs/releases.ko.md)를 참고하세요.
+
+## 개발자용 빌드
 
 Node.js 22 이상과 프로젝트 지정 pnpm 10을 사용합니다.
 
