@@ -114,3 +114,34 @@
     opacity: 0.7;
   }
 }
+
+.node-shell-sessions {
+  .sessions-actions small {
+    flex-basis: 100%;
+    opacity: 0.7;
+  }
+  .permission-summary {
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .permission-result {
+    display: inline-block;
+    padding: 3px 8px;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+  }
+  .allowed {
+    color: var(--colorOk, #4caf50);
+  }
+  .denied {
+    color: var(--colorError, #e57373);
+  }
+  .optional {
+    color: var(--textColorSecondary);
+  }
+  .permission-reason {
+    max-width: 560px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
