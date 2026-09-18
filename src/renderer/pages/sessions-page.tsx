@@ -144,6 +144,18 @@ export function SessionsPage() {
             for (const session of closed) {
               if (session.status === "Closed") localSessions.delete(session.podName);
             }
+            // Discovery may still contain a stale copy of a locally deleted Pod.
+            setPods((current) =>
+              current.filter(
+                (pod) =>
+                  !closed.some(
+                    (session) =>
+                      session.status === "Closed" &&
+                      session.podName === pod.metadata.name &&
+                      session.namespace === pod.metadata.namespace,
+                  ),
+              ),
+            );
             setNow(Date.now());
           }}
         />
