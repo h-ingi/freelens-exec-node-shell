@@ -7,6 +7,6 @@ export default class ExecNodeShellMain extends Main.LensExtension {
     super(extension);
     // Settings RPC must exist before a renderer opens extension preferences.
     nodeShellSettings.loadExtension(this);
-    new SettingsMainIpc(this).register();
+    SettingsMainIpc.createInstance(this).register();
   }
 }
