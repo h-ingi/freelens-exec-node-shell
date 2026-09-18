@@ -226,8 +226,12 @@ function ExecNodeShellMenu({ object, toolbar }: NodeMenuProps) {
 }
 
 export default class ExecNodeShellRenderer extends Renderer.LensExtension {
-  async onActivate() {
+  constructor(extension: ConstructorParameters<typeof Renderer.LensExtension>[0]) {
+    super(extension);
+    // Preferences registration can be used before the activation callback.
     initializeSettingsClient(this);
+  }
+  async onActivate() {
     await loadSettings();
   }
   appPreferences = [
