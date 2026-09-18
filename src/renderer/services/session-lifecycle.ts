@@ -55,8 +55,21 @@ export class SessionLifecycle {
 
 export function isNotFound(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
-  const value = error as { status?: number; statusCode?: number; code?: number; reason?: string };
-  return value.status === 404 || value.statusCode === 404 || value.code === 404 || value.reason === "NotFound";
+  const value = error as {
+    status?: number;
+    statusCode?: number;
+    code?: number;
+    reason?: string;
+    error?: { code?: number; reason?: string };
+  };
+  return (
+    value.status === 404 ||
+    value.statusCode === 404 ||
+    value.code === 404 ||
+    value.reason === "NotFound" ||
+    value.error?.code === 404 ||
+    value.error?.reason === "NotFound"
+  );
 }
 
 export function quotePowerShell(value: string): string {
