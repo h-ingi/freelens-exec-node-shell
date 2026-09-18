@@ -117,3 +117,21 @@ it("separates optional attach denial from the node shell readiness summary", asy
   expect(ui.getByText("Not used (reference only)")).toBeTruthy();
   expect(ui.getByText("RBAC binding details").closest("details")?.open).toBe(false);
 });
+
+it("does not redisplay cleared history from a stale discovery snapshot", async () => {
+  mocks.list.mockResolvedValue([
+    {
+      metadata: { name: "pod-closed", namespace: "kube-system", uid: "old" },
+      spec: { nodeName: "node-a" },
+      status: { phase: "Running" },
+    },
+  ]);
+  const ui = render(<SessionsPage />);
+  fireEvent.click(ui.getByRole("button", { name: "Refresh / check permissions" }));
+  await waitFor(() => expect(mocks.list).toHaveBeenCalled());
+  await waitFor(() =>
+    expect((ui.getByRole("button", { name: "Refresh / check permissions" }) as HTMLButtonElement).disabled).toBe(false),
+  );
+  fireEvent.click(ui.getByRole("button", { name: "Clear closed sessions (1)" }));
+  expect(ui.queryByText("pod-closed")).toBeNull();
+});
