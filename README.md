@@ -6,7 +6,8 @@ Node 우클릭 메뉴에서 **Exec Node Shell**을 선택합니다.
 대상 환경: **FreeLens 1.10.2 / Windows PowerShell 5.1 / Linux Kubernetes Node**.
 개발 의존성 `@freelensapp/extensions`는 1.10.2에 고정했습니다.
 현재 터미널 명령 생성기는 PowerShell용이며 bash/zsh 로컬 터미널은 지원하지 않습니다.
-Node 내부 shell은 `/bin/sh`입니다.
+Node 내부 shell은 `/bin/sh`이며 프롬프트는 `노드명:/현재/경로 #` 형식입니다.
+`cd`하면 표시 경로도 바뀌며, Node의 profile 파일은 수정하지 않습니다.
 
 ## 동작
 
@@ -27,11 +28,12 @@ Extension은 해당 정책을 변경하지 않습니다.
 
 - 정상 `exit`: 원격 종료 표식으로 keep-alive를 종료하고 터미널 finally와 API 감시가 삭제합니다.
 - 터미널 X: terminal store에서 연결이 제거되면 API로 삭제합니다.
-- 실패 및 timeout: Pod Ready 120초, terminal ready 30초, 세션 기본 60분입니다.
+- 실패 및 timeout: Pod Ready 120초, terminal ready 30초, 세션 기본 60분입니다. 활동 여부와 관계없이 세션 시작부터 계산하는 최대 수명이며, 유휴 시간 제한이 아닙니다.
 - exec가 실제로 시작되지 않으면 컨테이너는 180초 후 종료하여 API 정리 대상으로 전환됩니다.
 - 삭제 실패: 실행 중 2초 간격으로 재시도합니다. 404는 이미 삭제된 것으로 처리합니다.
 - Preferences: namespace, image, timeout, Pod prefix를 저장합니다. main의 저장 응답을 확인한 뒤 완료 문구를 표시하며, 새 세션은 main에서 최신 설정을 읽어 적용합니다.
-- **Node Shell Sessions**: Node/Pod, namespace, 상태, 시작 시각, 경과 시간, Stop을 표시합니다.
+- **Node Shell Sessions**: Services 목록처럼 상단에 세션 수·namespace 필터·검색을 표시합니다. Node, Pod, namespace, 상태, 시작 시각, 경과 시간, Stop을 열로 구분하고 상태는 색상과 텍스트로 표시합니다.
+- 검색은 Node명·Pod명·상태를 대상으로 하며 선택한 namespace의 세션만 표시합니다.
 - **Refresh / check permissions**: RBAC 표와 기존 Pod를 조회합니다. 발견한 Pod는 확인 후 Delete할 수 있습니다.
 - 시작 시 및 60초마다 종료/만료된 orphan Pod를 점검합니다.
 
@@ -78,7 +80,7 @@ FreeLens를 다시 열지 않아도 서버에서 삭제해야 한다면 별도 �
 일반 사용자는 Node.js나 pnpm을 설치하거나 직접 빌드할 필요가 없습니다.
 
 1. [GitHub Releases](https://github.com/h-ingi/freelens-exec-node-shell/releases)에서 사용할 버전을 엽니다. 시험 버전은 **Pre-release**로 표시됩니다.
-2. **Assets**에서 `h-ingi-freelens-exec-node-shell-<버전>.tgz`를 다운로드합니다.
+2. **Assets**에서 `freelens-exec-node-shell-<버전>.tgz`를 다운로드합니다.
 3. FreeLens의 **Extensions** 화면에서 파일을 드래그하거나 로컬 파일 경로로 설치합니다. `.tgz`는 풀지 않습니다.
 4. Extension 활성화를 확인한 뒤 Node 우클릭 → **Exec Node Shell**을 선택합니다.
 
@@ -144,3 +146,12 @@ FreeLens GUI / PowerShell 5.1 / EKS 검증은 단위 테스트와 별도로 수�
 ## License
 
 MIT. 기존 FreeLens example extension의 라이선스 및 저작권 고지를 유지합니다.
+
+## 1.10.3-15 화면 개선
+
+확장 이름과 설정 제목은 `freelens-exec-node-shell`입니다. 설정 화면은 FreeLens 기본 Input을 사용합니다.
+기본 timeout은 60분을 유지하며 기존 저장값은 덮어쓰지 않습니다. 검증용으로 1분을 저장했다면 직접 60분으로 바꿔 Save하세요.
+이전 `@h-ingi/freelens-exec-node-shell`에서 이동하는 절차는 [업데이트 안내](docs/releases.ko.md)를 참고하세요.
+
+기존 기능 검증은 사용자 환경에서 완료되었다는 피드백을 받았습니다.
+이번 화면·이름·프롬프트 변경은 새 패키지 설치 후 표시, 검색, 설정 유지 및 셸 종료를 다시 확인해야 합니다.

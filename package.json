@@ -1,6 +1,6 @@
 {
-  "name": "@h-ingi/freelens-exec-node-shell",
-  "version": "1.10.3-14",
+  "name": "freelens-exec-node-shell",
+  "version": "1.10.3-15",
   "description": "FreeLens Node Shell using pods/exec instead of pods/attach",
   "repository": {
     "type": "git",
@@ -88,5 +88,6 @@
     "openlens",
     "freelens"
   ],
-  "packageManager": "pnpm@10.34.4+sha512.8768be55200ae3f2226b6527fcca2687e14bc4e5f12d7721a0f25da3df47915177058648db4177baf348120fa0ba2752d8d8d93f6beaf1fe64ae18da8de961af"
+  "packageManager": "pnpm@10.34.4+sha512.8768be55200ae3f2226b6527fcca2687e14bc4e5f12d7721a0f25da3df47915177058648db4177baf348120fa0ba2752d8d8d93f6beaf1fe64ae18da8de961af",
+  "storeName": "@h-ingi/freelens-exec-node-shell"
 }

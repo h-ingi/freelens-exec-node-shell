@@ -4,6 +4,7 @@ import { loadSettings } from "../settings/settings-client";
 import { cleanupIsEnabled, type LocalSession, localSessions, trackSession } from "./cleanup-service";
 import { checkPermissions, execAvailable, permissionSummary } from "./rbac-service";
 import { isNotFound, quotePowerShell, SessionLifecycle } from "./session-lifecycle";
+import { nodeShellRemoteCommand } from "./shell-command";
 
 export async function openNodeShell(nodeName: string) {
   const cluster = Renderer.Catalog.getActiveCluster();
@@ -208,8 +209,7 @@ export async function openNodeShell(nodeName: string) {
     stage = "sending exec command";
     const q = quotePowerShell;
     const target = `--context ${q(cluster.contextName)} -n ${q(NAMESPACE)}`;
-    const remote =
-      'touch /tmp/exec-started; nsenter -t 1 -m -u -i -n -p -- /bin/sh; result=$?; touch /tmp/exec-ended; exit "$result"';
+    const remote = nodeShellRemoteCommand(nodeName);
     const command =
       `Write-Host ${q(`=== Node Shell: ${nodeName} ===`)}; ` +
       `try { kubectl exec -it ${target} ${q(podName)} -c shell -- sh -c ${q(remote)} } ` +

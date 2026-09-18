@@ -5,6 +5,7 @@ import { loadSettings, saveSettings } from "./settings-client";
 
 export function NodeShellPreferences() {
   const [draft, setDraft] = useState(nodeShellSettings.toJSON());
+  const [timeout, setTimeoutValue] = useState(String(draft.timeoutMinutes));
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(true);
   const [loaded, setLoaded] = useState(false);
@@ -14,6 +15,7 @@ export function NodeShellPreferences() {
       .then((settings) => {
         if (mounted) {
           setDraft(settings);
+          setTimeoutValue(String(settings.timeoutMinutes));
           setLoaded(true);
         }
       })
@@ -28,7 +30,8 @@ export function NodeShellPreferences() {
     };
   }, []);
   const save = async () => {
-    const error = validateSettings(draft);
+    const settings = { ...draft, timeoutMinutes: Number(timeout) };
+    const error = validateSettings(settings);
     if (error) {
       setMessage(error);
       return;
@@ -36,8 +39,9 @@ export function NodeShellPreferences() {
     setBusy(true);
     setMessage("");
     try {
-      const saved = await saveSettings(draft);
+      const saved = await saveSettings(settings);
       setDraft(saved);
+      setTimeoutValue(String(saved.timeoutMinutes));
       setMessage(`Saved. New sessions will use a ${saved.timeoutMinutes} minute timeout.`);
     } catch (error) {
       setMessage(`Failed to save settings: ${String(error)}`);
@@ -46,42 +50,35 @@ export function NodeShellPreferences() {
     }
   };
   return (
-    <div style={{ display: "grid", gap: 12, maxWidth: 560 }}>
-      <label>
-        Namespace
-        <input
-          disabled={busy || !loaded}
-          value={draft.namespace}
-          onChange={(event) => setDraft({ ...draft, namespace: event.target.value })}
-        />
-      </label>
-      <label>
-        Container image
-        <input
-          disabled={busy || !loaded}
-          value={draft.image}
-          onChange={(event) => setDraft({ ...draft, image: event.target.value })}
-        />
-      </label>
-      <label>
-        Session timeout (minutes)
-        <input
+    <div style={{ display: "grid", gap: 24, width: "100%" }}>
+      {[
+        { label: "Namespace", field: "namespace" as const },
+        { label: "Container image", field: "image" as const },
+        { label: "Pod prefix", field: "podPrefix" as const },
+      ].map(({ label, field }) => (
+        <div key={field} style={{ display: "grid", gap: 8 }}>
+          <div style={{ textTransform: "uppercase", fontSize: 12, fontWeight: 600 }}>{label}</div>
+          <Renderer.Component.Input
+            aria-label={label}
+            disabled={busy || !loaded}
+            value={draft[field]}
+            onChange={(value) => setDraft({ ...draft, [field]: value })}
+          />
+        </div>
+      ))}
+      <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ textTransform: "uppercase", fontSize: 12, fontWeight: 600 }}>Session timeout (minutes)</div>
+        <Renderer.Component.Input
+          aria-label="Session timeout (minutes)"
           disabled={busy || !loaded}
           type="number"
           min={1}
           max={1440}
-          value={draft.timeoutMinutes}
-          onChange={(event) => setDraft({ ...draft, timeoutMinutes: Number(event.target.value) })}
+          value={timeout}
+          onChange={setTimeoutValue}
         />
-      </label>
-      <label>
-        Pod prefix
-        <input
-          disabled={busy || !loaded}
-          value={draft.podPrefix}
-          onChange={(event) => setDraft({ ...draft, podPrefix: event.target.value })}
-        />
-      </label>
+        <small>Maximum session duration, including active use. Default: 60 minutes. Applies to new sessions.</small>
+      </div>
       <Renderer.Component.Button
         label={busy ? "Please wait…" : "Save"}
         disabled={busy || !loaded}

@@ -64,3 +64,9 @@ git push origin feat/node-shell-settings
 브랜치 끝 커밋과 단계별 조상 관계를 확인합니다. 각 중간 단계의 독립 실행 검증은 별도입니다.
 실제 Windows FreeLens/PowerShell/EKS 검증과 GitHub Release 게시 확인은 여전히 남아 있습니다.
 Trunk는 내부 오류로 실패한 이력이 있으며, 이번 문서도 실행 결과와 대체 형식 검사 결과를 PR에 기록합니다.
+
+## 화면 개선 반영 (1.10.3-15)
+
+설정 UI·확장 이름·셸 프롬프트 변경은 settings 단계부터 후속 브랜치에 반영합니다.
+Services 형태의 세션 목록 개선은 sessions 단계부터 후속 브랜치에 반영합니다.
+CI와 최종 통합본에는 모든 변경이 포함되며, main 병합은 별도입니다.
