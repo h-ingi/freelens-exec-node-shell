@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
+import { deserialize, serialize } from "node:v8";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { observable } from "mobx";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -73,7 +75,9 @@ vi.mock("@freelensapp/extensions", async () => {
         async invoke(channel: string, ...args: unknown[]) {
           const handler = host.handlers.get(channel);
           if (!handler) throw new Error("No settings handler");
-          return runInAction(() => handler({}, ...args));
+          const request = deserialize(serialize(args));
+          const response = await runInAction(() => handler({}, ...request));
+          return deserialize(serialize(response));
         }
       },
     },
@@ -150,4 +154,31 @@ it("enables timeout editing and saves from preferences without activation callba
     expect(ui.getByRole("status").textContent).toContain("Saved. New sessions will use a 1 minute timeout."),
   );
   expect(host.disk.timeoutMinutes).toBe(1);
+});
+
+it("saves observable drafts across the structured-clone IPC boundary", async () => {
+  const { default: MainExtension } = await import("../../main/index");
+  new MainExtension({} as ConstructorParameters<typeof MainExtension>[0]);
+  const client = await renderer();
+  const draft = observable({ ...client.store.toJSON(), timeoutMinutes: 1 });
+  expect(() => serialize(draft)).toThrow();
+  expect((await client.saveSettings(draft)).timeoutMinutes).toBe(1);
+  expect(host.disk.timeoutMinutes).toBe(1);
+});
+
+it("rejects malformed IPC replies without replacing the current settings", async () => {
+  const client = await renderer();
+  const { SETTINGS_GET } = await import("../../common/settings-channels");
+  host.handlers.set(SETTINGS_GET, () => JSON.stringify({ timeoutMinutes: 1 }));
+  await expect(client.loadSettings()).rejects.toThrow("missing or invalid fields");
+  expect(client.store.toJSON().timeoutMinutes).toBe(60);
+});
+
+it("validates untrusted requests again in main", async () => {
+  const { default: MainExtension } = await import("../../main/index");
+  new MainExtension({} as ConstructorParameters<typeof MainExtension>[0]);
+  const { SETTINGS_SAVE } = await import("../../common/settings-channels");
+  const handler = host.handlers.get(SETTINGS_SAVE);
+  expect(() => handler?.({}, JSON.stringify({ timeoutMinutes: 1 }))).toThrow("missing or invalid fields");
+  expect(host.disk.timeoutMinutes).toBeUndefined();
 });
