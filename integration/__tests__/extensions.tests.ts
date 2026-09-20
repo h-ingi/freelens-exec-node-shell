@@ -87,7 +87,8 @@ describe("extensions page tests", () => {
     // Trigger extension install
     const textbox = window.getByPlaceholder("Name or file path or URL");
     console.log("await textbox.fill");
-    await textbox.fill(process.env.EXTENSION_PATH || "@freelensapp/example-extension");
+    if (!process.env.EXTENSION_PATH) throw new Error("EXTENSION_PATH must point to the package built by CI");
+    await textbox.fill(process.env.EXTENSION_PATH);
     const install_button_selector = 'button[class*="Button install-module__button--"]';
     console.log("await window.click [data-waiting=false]");
     await window.click(install_button_selector.concat("[data-waiting=false]"));
@@ -97,7 +98,7 @@ describe("extensions page tests", () => {
     const installedExtensionName = await (
       await window.waitForSelector('div[class*="installed-extensions-module__extensionName--"]')
     ).textContent();
-    expect(installedExtensionName).toBe("@freelensapp/example-extension");
+    expect(installedExtensionName).toBe("freelens-exec-node-shell");
     const installedExtensionState = await (
       await window.waitForSelector('div[class*="installed-extensions-module__enabled--"]')
     ).textContent();

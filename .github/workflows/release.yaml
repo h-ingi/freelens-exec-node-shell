@@ -4,8 +4,8 @@ on:
   push:
     tags:
       - v*
-  pull_request:
-  workflow_dispatch:
+  pull_request: {}
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -112,7 +112,7 @@ jobs:
             사용자 PC에서 Node.js/pnpm 설치나 빌드는 필요하지 않습니다.
             `Source code (zip)`과 `Source code (tar.gz)`는 설치 파일이 아닙니다.
             설치 및 업데이트: https://github.com/h-ingi/freelens-exec-node-shell/blob/${{ github.ref_name }}/docs/releases.ko.md
-          files: |
+          files: |-
             dist/release/*.tgz
             dist/release/*.tgz.sha256
             dist/release/*.spdx.json
